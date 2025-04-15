@@ -1,4 +1,4 @@
-PIN_ROOT = ~/Documents/pin-3.30-98830-g1d7b601b3-gcc-linux
+PIN_ROOT = /home/ubuntu/Documents/pin-3.30-98830-g1d7b601b3-gcc-linux
 TOOL_ROOT := .
 TARGET := ex1
 CXX := g++
