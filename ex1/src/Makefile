@@ -7,7 +7,7 @@ CXX := g++
 CXXFLAGS := -Wall -Werror -Wno-unknown-pragmas -fPIC -O3 -std=c++11 \
 	-I$(PIN_ROOT)/source/include/pin \
 	-I$(PIN_ROOT)/source/include/pin/gen \
-	-I$(PIN_ROOT)/extras/xed-intel64/include
+	-I$(PIN_ROOT)/extras/xed-intel64/include/xed
 LIBS := -shared
 
 all: $(TARGET).so
