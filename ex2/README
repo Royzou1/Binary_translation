@@ -1,1 +1,9 @@
 Shiraz Hill, 209397231
+Roy Zoulty, 314654302
+
+**to Compile:**  
+Inside `SimpleExamples` folder inside of pin-3.30-98830-g1d7b601b3-gcc-linux folder/source/tools (cd there in the terminal) run:  make ex2.test. 
+--make sure you replace my makefile.rules with the one there.
+
+**to Run:** 
+inside the folder created where you run the makefile with makefiles.rules, cd obj-intel64 then use the ex2.so that was created there, which you can now use with the intel pin-3.30 in order to run the tool, with cmds like: <pindir>/pin -t ex2.so -- ./bzip2 -k -f input.txt.
