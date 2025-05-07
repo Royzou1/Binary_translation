@@ -105,10 +105,9 @@ VOID Fini(INT32 code, VOID* v) {
         const BblInfo& bbl = sorted[i];
         out << std::hex << bbl.addr << ", " << std::dec << bbl.exec_count;
 
-        if (bbl.is_cond_jump)
-            out << ", " << bbl.taken << ", " << bbl.fallthru;
-        else
-            out << ", 0 , 0";
+       
+        out << ", " << bbl.taken << ", " << bbl.fallthru;
+      
 
         if (bbl.is_indirect_jump) {
             vector<pair<ADDRINT, UINT64> > targets(bbl.indirect_targets.begin(), bbl.indirect_targets.end());
