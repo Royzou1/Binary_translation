@@ -59,6 +59,7 @@ VOID Trace(TRACE trace, VOID* v) {
     for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
         ADDRINT addr = BBL_Address(bbl);
         INS tail = BBL_InsTail(bbl);
+        bbl_map[addr].addr=addr;
 
         BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)CountExec, IARG_ADDRINT, addr, IARG_END);
 
@@ -107,7 +108,7 @@ VOID Fini(INT32 code, VOID* v) {
         if (bbl.is_cond_jump)
             out << ", " << bbl.taken << ", " << bbl.fallthru;
         else
-            out << ", , ";
+            out << ", 0 , 0";
 
         if (bbl.is_indirect_jump) {
             vector<pair<ADDRINT, UINT64> > targets(bbl.indirect_targets.begin(), bbl.indirect_targets.end());
