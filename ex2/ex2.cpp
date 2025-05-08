@@ -73,7 +73,7 @@ VOID Trace(TRACE trace, VOID* v) {
                            IARG_ADDRINT, addr, IARG_BOOL, FALSE, IARG_END);
         }
 
-        // ✅ Pin 3.30–compatible indirect jump/call detection
+        
         if (INS_IsIndirectControlFlow(tail)) {
             bbl_map[addr].is_indirect_jump = true;
 
@@ -90,35 +90,53 @@ VOID Trace(TRACE trace, VOID* v) {
 VOID Fini(INT32 code, VOID* v) {
     vector<BblInfo> sorted;
 
+    // Collect all executed basic blocks into a vector for sorting
     for (auto it = bbl_map.begin(); it != bbl_map.end(); ++it) {
         if (it->second.exec_count > 0)
             sorted.push_back(it->second);
     }
 
+    // Sort by execution count in descending order
     std::sort(sorted.begin(), sorted.end(), [](const BblInfo& a, const BblInfo& b) {
         return a.exec_count > b.exec_count;
     });
 
     ofstream out("edge-profile.csv");
 
+    //write titels for order
+    out << "<BBL_address>\t<BBL_exec_count>\t<BBL_conditionals_jumped>\t<BBL_conditionals_fellthrough>\t<BBL_returns>";
+    for (int i = 1; i <= 10; ++i) {
+        out << "\t<BBL_indirect_" << i << "_address>\t<BBL_indirect_" << i << "_jumped>";
+    }
+    out << "\n";
+
+    // Write profiling data
     for (size_t i = 0; i < sorted.size(); ++i) {
         const BblInfo& bbl = sorted[i];
-        out << std::hex << bbl.addr << ", " << std::dec << bbl.exec_count;
 
-       
-        out << ", " << bbl.taken << ", " << bbl.fallthru;
-      
+        // Basic information for the BBL
+        out << std::hex << bbl.addr << ", "
+            << std::dec << bbl.exec_count << ", "
+            << bbl.taken << ", "
+            << bbl.fallthru 
+            
 
+        // Add up to 10 most frequent indirect targets
+        int limit = 0;
         if (bbl.is_indirect_jump) {
-            vector<pair<ADDRINT, UINT64> > targets(bbl.indirect_targets.begin(), bbl.indirect_targets.end());
+            vector<pair<ADDRINT, UINT64>> targets(bbl.indirect_targets.begin(), bbl.indirect_targets.end());
             std::sort(targets.begin(), targets.end(), [](const pair<ADDRINT, UINT64>& a, const pair<ADDRINT, UINT64>& b) {
                 return a.second > b.second;
             });
 
-            int limit = 0;
             for (size_t j = 0; j < targets.size() && limit < 10; ++j, ++limit) {
-                out << ", " << std::hex << targets[j].first << " , " << std::dec << targets[j].second;
+                out << ", " << std::hex << targets[j].first << ", " << std::dec << targets[j].second;
             }
+        }
+
+        // Fill remaining indirect slots with blanks
+        for (; limit < 10; ++limit) {
+            out << "\t\t";
         }
 
         out << "\n";
