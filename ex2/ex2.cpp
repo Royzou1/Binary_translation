@@ -118,7 +118,7 @@ VOID Fini(INT32 code, VOID* v) {
         out << std::hex << bbl.addr << ", "
             << std::dec << bbl.exec_count << ", "
             << bbl.taken << ", "
-            << bbl.fallthru 
+            << bbl.fallthru ;
             
 
         // Add up to 10 most frequent indirect targets
@@ -134,10 +134,7 @@ VOID Fini(INT32 code, VOID* v) {
             }
         }
 
-        // Fill remaining indirect slots with blanks
-        for (; limit < 10; ++limit) {
-            out << "\t\t";
-        }
+     
 
         out << "\n";
     }
