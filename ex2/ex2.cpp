@@ -115,11 +115,12 @@ VOID Fini(INT32 code, VOID* v) {
         const BblInfo& bbl = sorted[i];
 
         // Basic information for the BBL
-        out << std::hex << bbl.addr << ", "
-            << std::dec << bbl.exec_count << ", "
-            << bbl.taken << ", "
+        out << std::hex << bbl.addr << "\t"
+            << std::dec << bbl.exec_count << "\t"
+            << bbl.taken << "\t"
             << bbl.fallthru ;
             
+
 
         // Add up to 10 most frequent indirect targets
         int limit = 0;
@@ -130,7 +131,7 @@ VOID Fini(INT32 code, VOID* v) {
             });
 
             for (size_t j = 0; j < targets.size() && limit < 10; ++j, ++limit) {
-                out << ", " << std::hex << targets[j].first << ", " << std::dec << targets[j].second;
+                out << "\t" << std::hex << targets[j].first << "\t" << std::dec << targets[j].second;
             }
         }
 
