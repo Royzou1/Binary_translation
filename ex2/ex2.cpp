@@ -104,7 +104,7 @@ VOID Fini(INT32 code, VOID* v) {
     ofstream out("edge-profile.csv");
 
     //write titels for order
-    out << "<BBL_address>\t<BBL_exec_count>\t<BBL_conditionals_jumped>\t<BBL_conditionals_fellthrough>\t<BBL_returns>";
+    out << "<BBL_address>\t<BBL_exec_count>\t<BBL_conditionals_jumped>\t<BBL_conditionals_fellthrough>";
     for (int i = 1; i <= 10; ++i) {
         out << "\t<BBL_indirect_" << i << "_address>\t<BBL_indirect_" << i << "_jumped>";
     }
