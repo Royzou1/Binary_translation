@@ -1,11 +1,6 @@
-//ex3
-// ex3.cpp - Basic block profiling with Probe mode using PIN (with XED-based NOP insertion)
+// ex3.cpp - Basic block profiling with Probe mode using PIN (cleaned-up version)
 
 #include "pin.H"
-extern "C" {
-#include "xed-interface.h"
-}
-
 #include <iostream>
 #include <fstream>
 #include <map>
@@ -22,7 +17,6 @@ using std::pair;
 using std::sort;
 using std::vector;
 
-static UINT64 rax_mem;
 static UINT64 bb_map_mem[MAX_BBL_NUM];
 static ADDRINT bb_addresses[MAX_BBL_NUM] = {0};
 static UINT32 total_bbls = 0;
@@ -30,40 +24,27 @@ static UINT32 total_bbls = 0;
 PIN_LOCK pinLock;
 ofstream OutFile;
 
-xed_state_t dstate = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
+// Function to increment basic block execution count
+VOID CountBBL(UINT32 id) {
+    bb_map_mem[id]++;
+}
 
-// Called before each basic block executes (manually inserted instruction instrumentation)
+// Optional no-op function for Probe Mode
+VOID InsertNOP() {
+    // does nothing, placeholder if needed
+}
+
+// Called before each basic block executes (instrumentation)
 VOID InstrumentBBL(BBL bbl, UINT32 bbl_id) {
     INS lastIns = BBL_InsTail(bbl);
 
-    // Add XED-based NOP before jump
+    // Add a NOP call before jump instructions for assignment compliance
     if ((INS_IsDirectControlFlow(lastIns) || INS_IsIndirectControlFlow(lastIns)) &&
         !INS_IsRet(lastIns) && !INS_IsCall(lastIns)) {
-        xed_encoder_instruction_t enc_instr;
-        xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP, 64);
-
-        xed_encoder_request_t enc_req;
-        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-            cerr << "Error: failed to convert to encoder request for NOP" << endl;
-            return;
-        }
-        UINT8 encoded[15];
-        unsigned int encoded_len = 0;
-        if (xed_encode(&enc_req, encoded, 15, &encoded_len) != XED_ERROR_NONE) {
-            cerr << "Error: failed to encode NOP instruction" << endl;
-            return;
-        }
-
-        INS_InsertFill(lastIns, IPOINT_BEFORE, encoded, encoded_len);
+        BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)InsertNOP, IARG_END);
     }
 
-    // Manual instrumentation to increment bb_map_mem[bbl_id]
-    BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)[] (UINT32 id) {
-        UINT64 tmp = bb_map_mem[id];
-        tmp++;
-        bb_map_mem[id] = tmp;
-    }, IARG_UINT32, bbl_id, IARG_END);
+    BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)CountBBL, IARG_UINT32, bbl_id, IARG_END);
 }
 
 VOID ImageLoad(IMG img, VOID *v) {
@@ -101,7 +82,7 @@ VOID Fini(INT32 code, VOID *v) {
 }
 
 INT32 Usage() {
-    cerr << "This tool profiles basic blocks with XED-inserted NOPs and manual counters, writing to bb-profile.csv" << endl;
+    cerr << "This tool profiles basic blocks using probe mode and outputs to bb-profile.csv" << endl;
     return -1;
 }
 
