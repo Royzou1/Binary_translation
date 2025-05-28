@@ -1,5 +1,3 @@
-// ex3.cpp - Basic block profiling with Probe mode using PIN (cleaned-up version)
-
 #include "pin.H"
 #include <iostream>
 #include <fstream>
@@ -17,72 +15,63 @@ using std::pair;
 using std::sort;
 using std::vector;
 
-static UINT64 bb_map_mem[MAX_BBL_NUM];
-static ADDRINT bb_addresses[MAX_BBL_NUM] = {0};
+// Globals
+static UINT64 bbl_counts[MAX_BBL_NUM] = {0};
+static ADDRINT bbl_addresses[MAX_BBL_NUM] = {0};
 static UINT32 total_bbls = 0;
-
 PIN_LOCK pinLock;
 ofstream OutFile;
 
-// Function to increment basic block execution count
+// Called each time a BBL is executed
 VOID CountBBL(UINT32 id) {
-    bb_map_mem[id]++;
+    bbl_counts[id]++;
 }
 
-// Optional no-op function for Probe Mode
-VOID InsertNOP() {
-    // does nothing, placeholder if needed
-}
+// Instrument each trace with Probe-mode-compatible logic
+VOID TraceInstrument(TRACE trace, VOID *v) {
+    // Iterate over all basic blocks in the trace
+    for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
+        INS tail = BBL_InsTail(bbl);
 
-// Called before each basic block executes (instrumentation)
-VOID InstrumentBBL(BBL bbl, UINT32 bbl_id) {
-    INS lastIns = BBL_InsTail(bbl);
+        if (INS_IsDirectControlFlow(tail) && !INS_IsCall(tail) && !INS_IsRet(tail)) {
+            if (total_bbls >= MAX_BBL_NUM)
+                continue;
 
-    // Add a NOP call before jump instructions for assignment compliance
-    if ((INS_IsDirectControlFlow(lastIns) || INS_IsIndirectControlFlow(lastIns)) &&
-        !INS_IsRet(lastIns) && !INS_IsCall(lastIns)) {
-        BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)InsertNOP, IARG_END);
-    }
+            UINT32 id = total_bbls;
+            bbl_addresses[id] = BBL_Address(bbl);
 
-    BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)CountBBL, IARG_UINT32, bbl_id, IARG_END);
-}
+            BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)CountBBL,
+                          IARG_UINT32, id,
+                          IARG_END);
 
-VOID ImageLoad(IMG img, VOID *v) {
-    if (!IMG_IsMainExecutable(img)) return;
-
-    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-            RTN_Open(rtn);
-            for (BBL bbl = RTN_BblHead(rtn); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
-                if (total_bbls >= MAX_BBL_NUM) continue;
-                UINT32 bbl_id = total_bbls;
-                bb_addresses[bbl_id] = BBL_Address(bbl);
-                InstrumentBBL(bbl, bbl_id);
-                total_bbls++;
-            }
-            RTN_Close(rtn);
+            total_bbls++;
         }
     }
 }
 
+// Write output
 VOID Fini(INT32 code, VOID *v) {
     OutFile.open("bb-profile.csv");
-    vector<pair<ADDRINT, UINT64>> bb_data;
-    for (UINT32 i = 0; i < total_bbls; ++i) {
-        if (bb_map_mem[i] > 0)
-            bb_data.push_back(std::make_pair(bb_addresses[i], bb_map_mem[i]));
+    vector<pair<ADDRINT, UINT64>> data;
+
+    for (UINT32 i = 0; i < total_bbls; i++) {
+        if (bbl_counts[i] > 0)
+            data.emplace_back(bbl_addresses[i], bbl_counts[i]);
     }
-    sort(bb_data.begin(), bb_data.end(), [](const auto &a, const auto &b) {
+
+    sort(data.begin(), data.end(), [](const auto &a, const auto &b) {
         return b.second < a.second;
     });
-    for (const auto &p : bb_data) {
+
+    for (const auto &p : data) {
         OutFile << std::hex << p.first << ", " << std::dec << p.second << endl;
     }
+
     OutFile.close();
 }
 
 INT32 Usage() {
-    cerr << "This tool profiles basic blocks using probe mode and outputs to bb-profile.csv" << endl;
+    cerr << "Usage: pintool in Probe mode tracking basic blocks ending in direct jumps." << endl;
     return -1;
 }
 
@@ -90,8 +79,10 @@ int main(int argc, char *argv[]) {
     if (PIN_Init(argc, argv)) return Usage();
     PIN_InitSymbols();
     PIN_InitLock(&pinLock);
-    IMG_AddInstrumentFunction(ImageLoad, 0);
+
+    TRACE_AddInstrumentFunction(TraceInstrument, 0);
     PIN_AddFiniFunction(Fini, 0);
-    PIN_StartProgramProbed();
+
+    PIN_StartProgramProbed(); // Probe mode!
     return 0;
 }
