@@ -703,8 +703,6 @@ int find_candidate_rtns_for_translation(IMG img)
 {
     int rc;
 
-    // go over routines and check if they are candidates for translation and mark them for translation:
-
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
     {
         if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
@@ -712,27 +710,21 @@ int find_candidate_rtns_for_translation(IMG img)
 
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
         {
-
             if (rtn == RTN_Invalid()) {
-              cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
+                cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
                 continue;
             }
 
-            // Keep the entry num of the rtn head in case we need to
-            // revert the insertin of the instruction in rtn into the instructions
-            // map due to an invalid decoding.
             unsigned rtn_entry = num_of_instr_map_entries;
+            RTN_Open(rtn);
 
-            // Open the RTN.
-            RTN_Open( rtn );
+            INS prev = INS_Invalid();
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
-                //debug print of orig instruction:
                 if (KnobVerbose) {
                     cerr << "old instr: ";
                     cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
-                    //xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));
                 }
 
                 ADDRINT addr = INS_Address(ins);
@@ -740,189 +732,100 @@ int find_candidate_rtns_for_translation(IMG img)
                 xed_decoded_inst_t xedd;
                 xed_error_enum_t xed_code;
 
-                xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+                xed_decoded_inst_zero_set_mode(&xedd, &dstate);
                 xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
                 if (xed_code != XED_ERROR_NONE) {
                     cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
                     return -1;
                 }
-                
-                
 
-                // Add instr into instr map:
-				bool isRtnHead = (RTN_Address(rtn) == addr);
+                bool isRtnHead = (RTN_Address(rtn) == addr);
                 rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
                 if (rc < 0) {
-                    cerr << "ERROR: failed during instructon translation." << endl;
+                    cerr << "ERROR: failed during instruction translation." << endl;
                     return -1;
                 }
 
-               
+                //detect start of a basic block
+                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
-                bool isInsTerminatesBBL =  !INS_IsCall(ins) && (INS_IsBranch(ins) || INS_IsRet(ins) || !INS_Valid(INS_Next(ins)));
-
-                  // Insert the instructions for collecting BBL profiling before
-                  // the terminating BBL instruction.
-                  
-                  
-                  if (isInsTerminatesBBL) {
-    xed_encoder_instruction_t enc_instr;
-    xed_encoder_request_t enc_req;
-    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
-    unsigned int olen = 0;
-
-    static uint64_t rax_mem;
-
-    // Save the address of the current BBL
-    bb_addr_mem[bbl_num] = INS_Address(ins);
-
-    for (int i = 0; i < 5; i++) {
-        if (i == 0)
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-                      xed_reg(XED_REG_RAX));
-        else if (i == 1)
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                      xed_reg(XED_REG_RAX),
-                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
-        else if (i == 2)
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-                      xed_reg(XED_REG_RAX),
-                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-        else if (i == 3)
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
-                      xed_reg(XED_REG_RAX));
-        else if (i == 4)
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                      xed_reg(XED_REG_RAX),
-                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-
-        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-            cerr << "conversion to encode request failed\n";
-            return -1;
-        }
-
-        xed_error_enum_t xed_error = xed_encode(&enc_req,
-                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
-        if (xed_error != XED_ERROR_NONE) {
-            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-            return -1;
-        }
-
-        xed_decoded_inst_t xedd;
-        xed_decoded_inst_zero_set_mode(&xedd, &dstate);
-        if (xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
-            cerr << "xed decode failed at: 0x" << hex << addr << endl;
-            return -1;
-        }
-
-        rc = add_new_instr_entry(&xedd, 0x0, olen, false);
-        if (rc < 0) {
-            cerr << "instruction translation failed\n";
-            return -1;
-        }
-    }
-    bbl_num++; // Increment global BBL counter after each basic block
-}
-                  
-                  
-                  /*
-                  if (isInsTerminatesBBL) {
+                if (isInsStartsBBL) {
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
                     unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
                     unsigned int olen = 0;
-                    
                     static uint64_t rax_mem;
-                    
-                   
-                    //unsigned bbl_num = 0;
-                    
+
+                    bb_addr_mem[bbl_num] = INS_Address(ins);
+
                     for (int i = 0; i < 5; i++) {
-                      if (i == 0)
-                         // MOV RAX into rax_mem
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-                              xed_reg(XED_REG_RAX));
-                      else if (i == 1)
-                         // MOV from bb_map into RAX
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                   xed_reg(XED_REG_RAX),
-                                   xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
-                      else if (i == 2)
-                         // lea rax, [rax+1]
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA,  64,  // operand width
-                                   xed_reg(XED_REG_RAX), 
-                                   xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-                      else if (i == 3)
-                         // MOV from RAX into bb_map
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                   xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
-                                   xed_reg(XED_REG_RAX));
-                      else if (i == 4)
-                         // MOV from rax_mem into RAX
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                   xed_reg(XED_REG_RAX),
-                                   xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-                    
-                      xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                      xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                      if (!convert_ok) {
-                          cerr << "conversion to encode request failed" << endl;
-                          return -1;
-                      }
-                      xed_error_enum_t xed_error = xed_encode(&enc_req,
-                                reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
-                      if (xed_error != XED_ERROR_NONE) {
-                          cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-                        return -1;
-                      }
-                      xed_decoded_inst_zero_set_mode(&xedd,&dstate);
-                      xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&encoded_ins), max_inst_len);
-                      if (xed_code != XED_ERROR_NONE) {
-                          cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-                          return -1;;
-                      }
-                      rc = add_new_instr_entry(&xedd, 0x0, olen, false);
-                      if (rc < 0) {
-                        cerr << "ERROR: failed during instructon translation." << endl;
-                        return -1;
-                      }
+                        if (i == 0)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 1)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
+                        else if (i == 2)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+                        else if (i == 3)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 4)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+
+                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+                        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
+                            cerr << "conversion to encode request failed\n";
+                            return -1;
+                        }
+
+                        xed_error_enum_t xed_error = xed_encode(&enc_req,
+                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+                        if (xed_error != XED_ERROR_NONE) {
+                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+                            return -1;
+                        }
+
+                        xed_decoded_inst_t xedd_instr;
+                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
+                            cerr << "xed decode failed at: 0x" << hex << addr << endl;
+                            return -1;
+                        }
+
+                        rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+                        if (rc < 0) {
+                            cerr << "instruction translation failed\n";
+                            return -1;
+                        }
                     }
+
                     bbl_num++;
-                  }
-                  
-                   */
+                }
 
-            } // end for INS...
-
-
-            // debug print of routine name:
-            if (KnobVerbose) {
-                cerr <<   "rtn name: " << RTN_Name(rtn) << endl;
+                prev = ins; // update previous instruction
             }
 
+            if (KnobVerbose) {
+                cerr << "rtn name: " << RTN_Name(rtn) << endl;
+            }
 
-            // Close the RTN.
-            RTN_Close( rtn );
+            RTN_Close(rtn);
 
-            // Apply local chaining of direct calls and branches for this routine.
             chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
-
-         } // end for RTN..
-        
-         
-         
-    } // end for SEC...
-
+        }
+    }
 
     return 0;
 }
-
 
 /***************************/
 /* int copy_instrs_to_tc() */
