@@ -758,12 +758,13 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
 
                
-bool isInsTerminatesBBL =  !INS_IsCall(ins) && (INS_IsBranch(ins) || INS_IsRet(ins) || !INS_Valid(INS_Next(ins)));
+
+bool isInsTerminatesBBL =  INS_IsCall(ins) && (INS_IsBranch(ins) || INS_IsRet(ins) || !INS_Valid(INS_Next(ins)));
 
 
                   // Insert the instructions for collecting BBL profiling before
                   // the terminating BBL instruction.
-                  //
+                  
                   
                   if (isInsTerminatesBBL) {
     xed_encoder_instruction_t enc_instr;
