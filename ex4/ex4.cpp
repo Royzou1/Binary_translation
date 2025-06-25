@@ -808,29 +808,15 @@ int find_candidate_rtns_for_translation(IMG img)
                     EmitIncrement((ADDRINT)&fallthrough_counts[thisBbl], dstate);
                 }
 
-                // 3) Indirect branch/call: extract operands, then record target
+                                // 3) Indirect branch/call: record target via probe-mode callback
                 #pragma GCC diagnostic push
                 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
                 if (INS_IsIndirectBranchOrCall(ins)) {
                 #pragma GCC diagnostic pop
-                    xed_reg_enum_t base_reg  = xed_decoded_inst_get_base_reg(&xedd, 0);
-                    xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(&xedd, 0);
-                    xed_int64_t    disp      = xed_decoded_inst_get_memory_displacement(&xedd, 0);
-                    xed_uint_t     scale     = xed_decoded_inst_get_scale(&xedd, 0);
-                    xed_uint_t     memops    = xed_decoded_inst_number_of_memory_operands(&xedd);
-                    xed_reg_enum_t targ_reg  = XED_REG_INVALID;
-                    if (!memops) {
-                        targ_reg = xed_decoded_inst_get_reg(&xedd, XED_OPERAND_REG0);
-                    }
-                    dump_instr_from_xedd(&xedd, INS_Address(ins));
-                    std::cerr << " base_reg="  << xed_reg_enum_t2str(base_reg)
-                              << " index_reg=" << xed_reg_enum_t2str(index_reg)
-                              << " scale="     << scale
-                              << " disp="      << disp
-                              << " targ_reg="  << xed_reg_enum_t2str(targ_reg)
-                              << std::endl;
-
-                    // [Implement inline XED encoding to increment indirect_target_counts[thisBbl][target]]
+                    // Use a lightweight analysis routine to update map
+                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)[](UINT32 id, ADDRINT target){
+                        indirect_target_counts[id][target]++;
+                    }, IARG_UINT32, thisBbl, IARG_BRANCH_TARGET_ADDR, IARG_END);
                 }
 
                 prev = ins;
