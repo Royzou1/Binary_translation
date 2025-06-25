@@ -700,7 +700,7 @@ int fix_instructions_displacements()
    return 0;
 }
 
-//-----------------------------------------------------------------------------
+///-----------------------------------------------------------------------------
 // Helper: emit a 5-instr XED sequence to ++*counter_ptr, preserving RAX
 //-----------------------------------------------------------------------------  
 void EmitIncrement(ADDRINT counter_ptr, xed_state_t &dstate) {
@@ -768,7 +768,7 @@ void EmitIncrement(ADDRINT counter_ptr, xed_state_t &dstate) {
 }
 
 //-----------------------------------------------------------------------------
-// Updated Ex4 translation callback (sketch)
+// Updated Ex4 translation callback (probe mode)
 //-----------------------------------------------------------------------------
 int find_candidate_rtns_for_translation(IMG img)
 {
@@ -782,7 +782,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
             INS prev = INS_Invalid();
             unsigned thisBbl = 0;
-            
+
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
                 // Decode instruction for xedd
                 xed_decoded_inst_t xedd;
@@ -802,21 +802,21 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 // 2) Conditional branch: taken vs. fall-through
                 if (INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
-                    // Taken edge: encode at branch slot
                     EmitIncrement((ADDRINT)&taken_counts[thisBbl], dstate);
-                    // Fall-through edge: encode at next-instr slot
                     EmitIncrement((ADDRINT)&fallthrough_counts[thisBbl], dstate);
                 }
 
-                                // 3) Indirect branch/call: record target via probe-mode callback
+                // 3) Indirect branch/call: record target via probe-mode callback
                 #pragma GCC diagnostic push
                 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
                 if (INS_IsIndirectBranchOrCall(ins)) {
                 #pragma GCC diagnostic pop
-                    // Use a lightweight analysis routine to update map
-                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)[](UINT32 id, ADDRINT target){
-                        indirect_target_counts[id][target]++;
-                    }, IARG_UINT32, thisBbl, IARG_BRANCH_TARGET_ADDR, IARG_END);
+                    // Use a named analysis function instead of a lambda
+                    INS_InsertCall(ins, IPOINT_AFTER,
+                                   AFUNPTR(RecordIndirectCount),
+                                   IARG_UINT32, thisBbl,
+                                   IARG_BRANCH_TARGET_ADDR,
+                                   IARG_END);
                 }
 
                 prev = ins;
