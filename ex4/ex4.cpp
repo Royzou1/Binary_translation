@@ -809,7 +809,10 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
 
                 // 3) Indirect branch/call: extract operands, then record target
-                if (INS_IsIndirectBranch(ins) || INS_IsIndirectCall(ins)) {
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+                if (INS_IsIndirectBranchOrCall(ins)) {
+                #pragma GCC diagnostic pop
                     xed_reg_enum_t base_reg  = xed_decoded_inst_get_base_reg(&xedd, 0);
                     xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(&xedd, 0);
                     xed_int64_t    disp      = xed_decoded_inst_get_memory_displacement(&xedd, 0);
