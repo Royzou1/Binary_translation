@@ -26,10 +26,8 @@ static uint64_t bb_map_mem[MAX_BBL_NUM] = {0};
 static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
 static uint64_t taken_counts[MAX_BBL_NUM] = {0};
 static uint64_t fallthrough_counts[MAX_BBL_NUM] = {0};
-static std::map<ADDRINT, uint64_t> indirect_target_counts[MAX_BBL_NUM]; // up to 4 targets per BBL
-
-
- static unsigned bbl_num = 0;
+static std::map<ADDRINT, uint64_t> indirect_target_counts[MAX_BBL_NUM] = {0}; // up to 4 targets per BBL
+static unsigned bbl_num = 0;
 
 using namespace std;
 
@@ -37,6 +35,7 @@ std::ofstream outfile;
 
 // Data structure to store basic block counts
 std::map<ADDRINT, UINT64> bbl_counts;
+
 
 
 /*======================================================================*/
@@ -698,7 +697,21 @@ int fix_instructions_displacements()
     } while (size_diff != 0);
 
    return 0;
- }
+}
+
+// Analysis routines
+VOID CountBBEntry( UINT32 id ) {
+    bb_map_mem[id]++; 
+}
+VOID CountTaken( UINT32 id ) {
+    taken_counts[id]++; 
+}
+VOID CountFallthrough( UINT32 id ) {
+    fallthrough_counts[id]++; 
+}
+VOID RecordIndirect( UINT32 id, ADDRINT target ) {
+    indirect_target_counts[id][target]++; 
+}
 
 
 /*****************************************/
@@ -706,119 +719,58 @@ int fix_instructions_displacements()
 /*****************************************/
 int find_candidate_rtns_for_translation(IMG img)
 {
-    int rc;
-
-    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
-    {
+    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
         if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
             continue;
 
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
-        {
-            if (rtn == RTN_Invalid()) {
-                cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
-                continue;
-            }
-
-            unsigned rtn_entry = num_of_instr_map_entries;
+        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
+            if (rtn == RTN_Invalid()) continue;
             RTN_Open(rtn);
 
             INS prev = INS_Invalid();
+            UINT32 thisBbl = 0;
 
+            // walk each instruction
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+                // detect start of a new BBL
+                bool isBBHead = !INS_Valid(prev) || INS_IsControlFlow(prev);
+                if (isBBHead) {
+                    thisBbl = bbl_num++;
+                    bb_addr_mem[thisBbl] = INS_Address(ins);
 
-                if (KnobVerbose) {
-                    cerr << "old instr: ";
-                    cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
+                    // hook up basic-block entry counter
+                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)CountBBEntry,
+                                   IARG_UINT32, thisBbl,
+                                   IARG_END);
                 }
 
-                ADDRINT addr = INS_Address(ins);
-
-                xed_decoded_inst_t xedd;
-                xed_error_enum_t xed_code;
-
-                xed_decoded_inst_zero_set_mode(&xedd, &dstate);
-                xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
-                if (xed_code != XED_ERROR_NONE) {
-                    cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-                    return -1;
+                // for conditional branches, count taken vs. fall-through
+                if (INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
+                    INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)CountTaken,
+                                   IARG_UINT32, thisBbl,
+                                   IARG_END);
+                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)CountFallthrough,
+                                   IARG_UINT32, thisBbl,
+                                   IARG_END);
                 }
 
-                bool isRtnHead = (RTN_Address(rtn) == addr);
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
-                if (rc < 0) {
-                    cerr << "ERROR: failed during instruction translation." << endl;
-                    return -1;
-                }
-
-                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
-
-                if (isInsStartsBBL) {
-                    UINT32 bbl_index = bbl_num;
-
-                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)[](UINT32 idx) {
-                        bb_map_mem[idx]++;
-                    }, IARG_UINT32, bbl_index, IARG_END);
-
-                    if (INS_IsIndirectBranchOrCall(ins)) {
-                        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)[](UINT32 idx, ADDRINT target) {
-                            auto& map = indirect_target_counts[idx];
-                            if (map.find(target) == map.end() && map.size() >= 4) return;
-                            map[target]++;
-                        }, IARG_UINT32, bbl_index, IARG_BRANCH_TARGET_ADDR, IARG_END);
-
-                        xed_decoded_inst_t *xedd = INS_XedDec(ins);
-                        xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
-                        xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
-                        xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
-                        xed_uint_t scale = xed_decoded_inst_get_scale(xedd, 0);
-                        xed_uint_t width = xed_decoded_inst_get_memory_displacement_width_bits(xedd, 0);
-                        unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd, 0);
-                        xed_reg_enum_t targ_reg = XED_REG_INVALID;
-                        unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
-                        if (!memops)
-                            targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-
-                        dump_instr_from_xedd(xedd, INS_Address(ins));
-                        cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
-                             << " index reg: " << xed_reg_enum_t2str(index_reg)
-                             << " scale: " << scale
-                             << " disp: " << disp
-                             << " width: " << width
-                             << " mem addr width: " << mem_addr_width
-                             << " targ reg: " << xed_reg_enum_t2str(targ_reg)
-                             << "\n";
-                    }
-
-                    if (INS_HasFallThrough(ins)) {
-                        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)[](UINT32 idx) {
-                            taken_counts[idx]++;
-                        }, IARG_UINT32, bbl_index, IARG_END);
-
-                        INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)[](UINT32 idx) {
-                            fallthrough_counts[idx]++;
-                        }, IARG_UINT32, bbl_index, IARG_END);
-                    }
-
-                    bb_addr_mem[bbl_index] = INS_Address(ins);
-                    bbl_num++;
+                // for indirect jumps/calls, record the actual target
+                if (INS_IsIndirectBranchOrCall(ins)) {
+                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)RecordIndirect,
+                                   IARG_UINT32, thisBbl,
+                                   IARG_BRANCH_TARGET_ADDR,
+                                   IARG_END);
                 }
 
                 prev = ins;
             }
 
-            if (KnobVerbose) {
-                cerr << "rtn name: " << RTN_Name(rtn) << endl;
-            }
-
             RTN_Close(rtn);
-
-            chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
         }
     }
-
     return 0;
 }
+
 
 
 /***************************/
