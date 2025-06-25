@@ -701,7 +701,7 @@ int fix_instructions_displacements()
 }
 
 //-----------------------------------------------------------------------------
-// Helper: emit a 5‑instr XED sequence to ++*counter_ptr, preserving RAX
+// Helper: emit a 5-instr XED sequence to ++*counter_ptr, preserving RAX
 //-----------------------------------------------------------------------------  
 void EmitIncrement(ADDRINT counter_ptr, xed_state_t &dstate) {
     xed_encoder_request_t enc_req;
@@ -802,20 +802,14 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 // 2) Conditional branch: taken vs. fall-through
                 if (INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
-                    // Taken edge: encode at branch slot (offset 0)
+                    // Taken edge: encode at branch slot
                     EmitIncrement((ADDRINT)&taken_counts[thisBbl], dstate);
-                    // Fall-through edge: encode at next-instr slot (offset = original length)
-                    UINT32 origLen = INS_Size(ins);
-                    xed_decoded_inst_t dummy;
-                    xed_decoded_inst_zero_set_mode(&dummy, &dstate);
-                    // reuse EmitIncrement but after branch
-                    // (you may need to pass a flag to place at offset "origLen")
+                    // Fall-through edge: encode at next-instr slot
                     EmitIncrement((ADDRINT)&fallthrough_counts[thisBbl], dstate);
                 }
 
                 // 3) Indirect branch/call: extract operands, then record target
-                if (INS_IsIndirectBranchOrCall(ins)) {
-                    // pull base/index/disp/scale and target-reg
+                if (INS_IsIndirectBranch(ins) || INS_IsIndirectCall(ins)) {
                     xed_reg_enum_t base_reg  = xed_decoded_inst_get_base_reg(&xedd, 0);
                     xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(&xedd, 0);
                     xed_int64_t    disp      = xed_decoded_inst_get_memory_displacement(&xedd, 0);
@@ -825,7 +819,6 @@ int find_candidate_rtns_for_translation(IMG img)
                     if (!memops) {
                         targ_reg = xed_decoded_inst_get_reg(&xedd, XED_OPERAND_REG0);
                     }
-                    // Debug dump
                     dump_instr_from_xedd(&xedd, INS_Address(ins));
                     std::cerr << " base_reg="  << xed_reg_enum_t2str(base_reg)
                               << " index_reg=" << xed_reg_enum_t2str(index_reg)
@@ -834,18 +827,7 @@ int find_candidate_rtns_for_translation(IMG img)
                               << " targ_reg="  << xed_reg_enum_t2str(targ_reg)
                               << std::endl;
 
-                    // Now inject XED sequence that
-                    //  a) saves RAX
-                    //  b) loads the runtime target into RAX
-                    //     - if targ_reg != INVALID: MOV RAX, targ_reg
-                    //     - else: MOV/MOVZX to read [base + disp + index*scale]
-                    //  c) calls a small stub or do map update:
-                    //     e.g., MOV RAX, [RAX] etc or a direct call
-                    //  d) restores RAX
-
-                    // [ Sketch only — implement using EmitIncrement pattern ]
-                    // Example: to ++indirect_target_counts[thisBbl][target],
-                    // you may need to call an analysis routine.
+                    // [Implement inline XED encoding to increment indirect_target_counts[thisBbl][target]]
                 }
 
                 prev = ins;
@@ -856,7 +838,6 @@ int find_candidate_rtns_for_translation(IMG img)
     }
     return 0;
 }
-
 
 
 
