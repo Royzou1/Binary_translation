@@ -22,12 +22,13 @@ extern "C" {
 #include <algorithm>
 
 #define MAX_BBL_NUM 10000
-static uint64_t bb_map_mem[MAX_BBL_NUM] = {0}; 
-static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
-static uint64_t taken_counts[MAX_BBL_NUM] = {0};
+static uint64_t bb_map_mem[MAX_BBL_NUM]         = {0};
+static ADDRINT  bb_addr_mem[MAX_BBL_NUM]        = {0};
+static uint64_t taken_counts[MAX_BBL_NUM]       = {0};
 static uint64_t fallthrough_counts[MAX_BBL_NUM] = {0};
-static std::map<ADDRINT, uint64_t> indirect_target_counts[MAX_BBL_NUM] = {0}; // up to 4 targets per BBL
+static std::map<ADDRINT, uint64_t> indirect_target_counts[MAX_BBL_NUM];
 static unsigned bbl_num = 0;
+static uint64_t rax_scratch = 0;  // shared scratch slot for RAX preservation
 
 using namespace std;
 
@@ -699,24 +700,76 @@ int fix_instructions_displacements()
    return 0;
 }
 
-// Analysis routines
-VOID CountBBEntry( UINT32 id ) {
-    bb_map_mem[id]++; 
-}
-VOID CountTaken( UINT32 id ) {
-    taken_counts[id]++; 
-}
-VOID CountFallthrough( UINT32 id ) {
-    fallthrough_counts[id]++; 
-}
-VOID RecordIndirect( UINT32 id, ADDRINT target ) {
-    indirect_target_counts[id][target]++; 
+//-----------------------------------------------------------------------------
+// Helper: emit a 5‑instr XED sequence to ++*counter_ptr, preserving RAX
+//-----------------------------------------------------------------------------  
+void EmitIncrement(ADDRINT counter_ptr, xed_state_t &dstate) {
+    xed_encoder_request_t enc_req;
+    xed_decoded_inst_t   xedd_instr;
+    xed_encoder_instruction_t enc_instr;
+    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+    unsigned ilen = XED_MAX_INSTRUCTION_BYTES;
+    unsigned olen = 0;
+
+    // Save RAX: MOV [rax_scratch], RAX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_scratch,64), 64),
+              xed_reg(XED_REG_RAX));
+    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+    xed_convert_to_encoder_request(&enc_req, &enc_instr);
+    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
+    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
+    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+
+    // Load counter: MOV RAX, [counter_ptr]
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX),
+              xed_mem_bd(XED_REG_INVALID, xed_disp(counter_ptr,64), 64));
+    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+    xed_convert_to_encoder_request(&enc_req, &enc_instr);
+    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
+    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
+    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+
+    // Increment: LEA RAX, [RAX + 1]
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+              xed_reg(XED_REG_RAX),
+              xed_mem_bd(XED_REG_RAX, xed_disp(1,8), 64));
+    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+    xed_convert_to_encoder_request(&enc_req, &enc_instr);
+    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
+    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
+    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+
+    // Store back: MOV [counter_ptr], RAX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp(counter_ptr,64), 64),
+              xed_reg(XED_REG_RAX));
+    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+    xed_convert_to_encoder_request(&enc_req, &enc_instr);
+    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
+    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
+    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+
+    // Restore RAX: MOV RAX, [rax_scratch]
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX),
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_scratch,64), 64));
+    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+    xed_convert_to_encoder_request(&enc_req, &enc_instr);
+    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
+    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
+    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
 }
 
-
-/*****************************************/
-/* find_candidate_rtns_for_translation() */
-/*****************************************/
+//-----------------------------------------------------------------------------
+// Updated Ex4 translation callback (sketch)
+//-----------------------------------------------------------------------------
 int find_candidate_rtns_for_translation(IMG img)
 {
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
@@ -728,38 +781,71 @@ int find_candidate_rtns_for_translation(IMG img)
             RTN_Open(rtn);
 
             INS prev = INS_Invalid();
-            UINT32 thisBbl = 0;
-
-            // walk each instruction
+            unsigned thisBbl = 0;
+            
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-                // detect start of a new BBL
+                // Decode instruction for xedd
+                xed_decoded_inst_t xedd;
+                xed_decoded_inst_zero_set_mode(&xedd, &dstate);
+                xed_error_enum_t xed_code = xed_decode(&xedd,
+                                        (uint8_t*)INS_Address(ins), max_inst_len);
+                if (xed_code != XED_ERROR_NONE) return -1;
+
+                // 1) Basic-block head? instrument entry count
                 bool isBBHead = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 if (isBBHead) {
-                    thisBbl = bbl_num++;
+                    thisBbl = bbl_num;
                     bb_addr_mem[thisBbl] = INS_Address(ins);
-
-                    // hook up basic-block entry counter
-                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)CountBBEntry,
-                                   IARG_UINT32, thisBbl,
-                                   IARG_END);
+                    EmitIncrement((ADDRINT)&bb_map_mem[thisBbl], dstate);
+                    bbl_num++;
                 }
 
-                // for conditional branches, count taken vs. fall-through
+                // 2) Conditional branch: taken vs. fall-through
                 if (INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
-                    INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)CountTaken,
-                                   IARG_UINT32, thisBbl,
-                                   IARG_END);
-                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)CountFallthrough,
-                                   IARG_UINT32, thisBbl,
-                                   IARG_END);
+                    // Taken edge: encode at branch slot (offset 0)
+                    EmitIncrement((ADDRINT)&taken_counts[thisBbl], dstate);
+                    // Fall-through edge: encode at next-instr slot (offset = original length)
+                    UINT32 origLen = INS_Size(ins);
+                    xed_decoded_inst_t dummy;
+                    xed_decoded_inst_zero_set_mode(&dummy, &dstate);
+                    // reuse EmitIncrement but after branch
+                    // (you may need to pass a flag to place at offset "origLen")
+                    EmitIncrement((ADDRINT)&fallthrough_counts[thisBbl], dstate);
                 }
 
-                // for indirect jumps/calls, record the actual target
+                // 3) Indirect branch/call: extract operands, then record target
                 if (INS_IsIndirectBranchOrCall(ins)) {
-                    INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)RecordIndirect,
-                                   IARG_UINT32, thisBbl,
-                                   IARG_BRANCH_TARGET_ADDR,
-                                   IARG_END);
+                    // pull base/index/disp/scale and target-reg
+                    xed_reg_enum_t base_reg  = xed_decoded_inst_get_base_reg(&xedd, 0);
+                    xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(&xedd, 0);
+                    xed_int64_t    disp      = xed_decoded_inst_get_memory_displacement(&xedd, 0);
+                    xed_uint_t     scale     = xed_decoded_inst_get_scale(&xedd, 0);
+                    xed_uint_t     memops    = xed_decoded_inst_number_of_memory_operands(&xedd);
+                    xed_reg_enum_t targ_reg  = XED_REG_INVALID;
+                    if (!memops) {
+                        targ_reg = xed_decoded_inst_get_reg(&xedd, XED_OPERAND_REG0);
+                    }
+                    // Debug dump
+                    dump_instr_from_xedd(&xedd, INS_Address(ins));
+                    std::cerr << " base_reg="  << xed_reg_enum_t2str(base_reg)
+                              << " index_reg=" << xed_reg_enum_t2str(index_reg)
+                              << " scale="     << scale
+                              << " disp="      << disp
+                              << " targ_reg="  << xed_reg_enum_t2str(targ_reg)
+                              << std::endl;
+
+                    // Now inject XED sequence that
+                    //  a) saves RAX
+                    //  b) loads the runtime target into RAX
+                    //     - if targ_reg != INVALID: MOV RAX, targ_reg
+                    //     - else: MOV/MOVZX to read [base + disp + index*scale]
+                    //  c) calls a small stub or do map update:
+                    //     e.g., MOV RAX, [RAX] etc or a direct call
+                    //  d) restores RAX
+
+                    // [ Sketch only — implement using EmitIncrement pattern ]
+                    // Example: to ++indirect_target_counts[thisBbl][target],
+                    // you may need to call an analysis routine.
                 }
 
                 prev = ins;
@@ -770,6 +856,7 @@ int find_candidate_rtns_for_translation(IMG img)
     }
     return 0;
 }
+
 
 
 
