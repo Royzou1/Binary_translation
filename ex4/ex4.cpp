@@ -751,72 +751,60 @@ int find_candidate_rtns_for_translation(IMG img)
                     return -1;
                 }
 
-                //detect start of a basic block
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
                 if (isInsStartsBBL) {
-                    xed_encoder_instruction_t enc_instr;
-                    xed_encoder_request_t enc_req;
-                    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-                    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
-                    unsigned int olen = 0;
-                    static uint64_t rax_mem;
+                    UINT32 bbl_index = bbl_num;
 
-                    bb_addr_mem[bbl_num] = INS_Address(ins);
+                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)[](UINT32 idx) {
+                        bb_map_mem[idx]++;
+                    }, IARG_UINT32, bbl_index, IARG_END);
 
-                    for (int i = 0; i < 5; i++) {
-                        if (i == 0)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-                                      xed_reg(XED_REG_RAX));
-                        else if (i == 1)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
-                        else if (i == 2)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-                        else if (i == 3)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
-                                      xed_reg(XED_REG_RAX));
-                        else if (i == 4)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+                    if (INS_IsIndirectBranchOrCall(ins)) {
+                        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)[](UINT32 idx, ADDRINT target) {
+                            auto& map = indirect_target_counts[idx];
+                            if (map.find(target) == map.end() && map.size() >= 4) return;
+                            map[target]++;
+                        }, IARG_UINT32, bbl_index, IARG_BRANCH_TARGET_ADDR, IARG_END);
 
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-                            cerr << "conversion to encode request failed\n";
-                            return -1;
-                        }
+                        xed_decoded_inst_t *xedd = INS_XedDec(ins);
+                        xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
+                        xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
+                        xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
+                        xed_uint_t scale = xed_decoded_inst_get_scale(xedd, 0);
+                        xed_uint_t width = xed_decoded_inst_get_memory_displacement_width_bits(xedd, 0);
+                        unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd, 0);
+                        xed_reg_enum_t targ_reg = XED_REG_INVALID;
+                        unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
+                        if (!memops)
+                            targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
 
-                        xed_error_enum_t xed_error = xed_encode(&enc_req,
-                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
-                        if (xed_error != XED_ERROR_NONE) {
-                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-                            return -1;
-                        }
-
-                        xed_decoded_inst_t xedd_instr;
-                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
-                            cerr << "xed decode failed at: 0x" << hex << addr << endl;
-                            return -1;
-                        }
-
-                        rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-                        if (rc < 0) {
-                            cerr << "instruction translation failed\n";
-                            return -1;
-                        }
+                        dump_instr_from_xedd(xedd, INS_Address(ins));
+                        cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
+                             << " index reg: " << xed_reg_enum_t2str(index_reg)
+                             << " scale: " << scale
+                             << " disp: " << disp
+                             << " width: " << width
+                             << " mem addr width: " << mem_addr_width
+                             << " targ reg: " << xed_reg_enum_t2str(targ_reg)
+                             << "\n";
                     }
 
+                    if (INS_HasFallThrough(ins)) {
+                        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)[](UINT32 idx) {
+                            taken_counts[idx]++;
+                        }, IARG_UINT32, bbl_index, IARG_END);
+
+                        INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)[](UINT32 idx) {
+                            fallthrough_counts[idx]++;
+                        }, IARG_UINT32, bbl_index, IARG_END);
+                    }
+
+                    bb_addr_mem[bbl_index] = INS_Address(ins);
                     bbl_num++;
                 }
 
-                prev = ins; // update previous instruction
+                prev = ins;
             }
 
             if (KnobVerbose) {
@@ -831,6 +819,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
     return 0;
 }
+
 
 /***************************/
 /* int copy_instrs_to_tc() */
