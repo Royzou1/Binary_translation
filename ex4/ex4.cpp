@@ -35,12 +35,8 @@ static uint64_t indirect_targets[MAX_BBL_NUM][4] = {{0}};
 static uint64_t indirect_counts[MAX_BBL_NUM][4] = {{0}};
 
 static ADDRINT bbl_addr_map[MAX_BBL_NUM] = {0};
-static unsigned int bbl_num_map[MAX_BBL_NUM] = {0};
 static unsigned bbl_total = 0;
 std::map<ADDRINT, unsigned> addr_to_bbl_num;
-
-// Temporary storage for registers
-static uint64_t rax_mem, rbx_mem, rcx_mem;
 
 using namespace std;
 
@@ -58,13 +54,9 @@ KNOB<BOOL>   KnobDumpTranslatedCode(KNOB_MODE_WRITEONCE,    "pintool",
 KNOB<BOOL>   KnobDoNotCommitTranslatedCode(KNOB_MODE_WRITEONCE,    "pintool",
     "no_tc_commit", "0", "Do not commit translated code");
 
-
-
 /* ===================================================================== */
 /* Global Variables */
 /* ===================================================================== */
-std::ofstream* out = 0;
-
 // For XED:
 #if defined(TARGET_IA32E)
     xed_state_t dstate = {XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b};
@@ -77,8 +69,6 @@ const unsigned int max_inst_len = XED_MAX_INSTRUCTION_BYTES;
 ADDRINT lowest_sec_addr = 0;
 ADDRINT highest_sec_addr = 0;
 
-#define MAX_PROBE_JUMP_INSTR_BYTES  14
-
 // tc containing the new code:
 char *tc;
 unsigned tc_cursor = 0;
@@ -89,13 +79,11 @@ typedef struct {
     ADDRINT new_ins_addr;
     ADDRINT orig_targ_addr;
     bool isRtnHead;
-    bool isBblHead;
-    bool isIndirectBranch;
-    unsigned int bbl_num;
     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
     unsigned int size;
     int targ_map_entry;
 } instr_map_t;
+
 
 instr_map_t *instr_map = NULL;
 unsigned num_of_instr_map_entries = 0;
@@ -108,18 +96,6 @@ std::map<ADDRINT, unsigned> entry_map;
 /* Service dump routines                                         */
 /* ============================================================= */
 
-/*************************/
-/* dump_instr_from_xedd */
-/*************************/
-void dump_instr_from_xedd (xed_decoded_inst_t* xedd, ADDRINT address)
-{
-    char disasm_buf[2048];
-    xed_uint64_t runtime_address = static_cast<UINT64>(address);
-    xed_format_context(XED_SYNTAX_INTEL, xedd, disasm_buf, sizeof(disasm_buf), static_cast<UINT64>(runtime_address), 0, 0);
-    cerr << hex << address << ": " << disasm_buf <<  endl;
-}
-
-
 /************************/
 /* dump_instr_from_mem */
 /************************/
@@ -127,13 +103,18 @@ void dump_instr_from_mem (ADDRINT *address, ADDRINT new_addr)
 {
   char disasm_buf[2048];
   xed_decoded_inst_t new_xedd;
+
   xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
+
   xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
+
   if (xed_code != XED_ERROR_NONE){
       cerr << "invalid opcode" << endl;
       return;
   }
+
   xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(new_addr), 0, 0);
+
   cerr << "0x" << hex << new_addr << ": " << disasm_buf <<  endl;
 }
 
@@ -158,90 +139,62 @@ void dump_instr_map_entry(int instr_map_entry)
     dump_instr_from_mem((ADDRINT *)instr_map[instr_map_entry].encoded_ins, instr_map[instr_map_entry].new_ins_addr);
 }
 
+
 /* ============================================================= */
-/* Helper Functions for Instrumentation                          */
+/* Analysis routines                                             */
 /* ============================================================= */
 
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size, bool isRtnHead, bool isBblHead, unsigned int bbl_num, bool isIndirectBranch = false);
-
-// Helper to save a register to memory via RAX
-void save_reg(xed_reg_enum_t reg_to_save, ADDRINT mem_addr) {
-    xed_encoder_instruction_t enc_instr;
-    xed_encoder_request_t enc_req;
-    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-    unsigned int olen = 0;
-
-    // MOV RAX, REG
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RAX), xed_reg(reg_to_save));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-    xed_decoded_inst_t xedd;
-    xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-    add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-    // MOV [mem_addr], RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_mem_bd(XED_REG_INVALID, xed_disp(mem_addr, 64), 64), xed_reg(XED_REG_RAX));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-    xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-    add_new_instr_entry(&xedd, 0, olen, false, false, 0);
+VOID CountBbl(UINT32 bbl_num) {
+    bbl_exec_count[bbl_num]++;
 }
 
-// Helper to restore a register from memory via RAX
-void restore_reg(xed_reg_enum_t reg_to_restore, ADDRINT mem_addr) {
-    xed_encoder_instruction_t enc_instr;
-    xed_encoder_request_t enc_req;
-    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-    unsigned int olen = 0;
-
-    // MOV RAX, [mem_addr]
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RAX), xed_mem_bd(XED_REG_INVALID, xed_disp(mem_addr, 64), 64));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-    xed_decoded_inst_t xedd;
-    xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-    add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-    // MOV REG, RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(reg_to_restore), xed_reg(XED_REG_RAX));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-    xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-    add_new_instr_entry(&xedd, 0, olen, false, false, 0);
+VOID CountTaken(UINT32 bbl_num) {
+    taken_count[bbl_num]++;
 }
+
+VOID CountFallthrough(UINT32 bbl_num) {
+    fallthru_count[bbl_num]++;
+}
+
+VOID RecordIndirect(UINT32 bbl_num, ADDRINT target_addr) {
+    for (int i = 0; i < 4; i++) {
+        if (indirect_targets[bbl_num][i] == target_addr || indirect_targets[bbl_num][i] == 0) {
+            indirect_targets[bbl_num][i] = target_addr;
+            indirect_counts[bbl_num][i]++;
+            return;
+        }
+    }
+    // If all slots are full, do nothing for simplicity. A more complex scheme could be LRU.
+}
+
 
 /* ============================================================= */
 /* Translation routines                                         */
 /* ============================================================= */
 
-
 /*************************/
 /* add_new_instr_entry() */
 /*************************/
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size, bool isRtnHead, bool isBblHead, unsigned int bbl_num, bool isIndirectBranch)
+int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size, bool isRtnHead)
 {
     ADDRINT orig_targ_addr = 0x0;
 
-    if (xed_decoded_inst_get_length (xedd) != size && pc != 0) {
+    if (xed_decoded_inst_get_length (xedd) != size) {
         cerr << "Invalid instruction decoding" << endl;
         return -1;
     }
 
-    if (xed_decoded_inst_get_category(xedd) == XED_CATEGORY_COND_BR ||
-        xed_decoded_inst_get_category(xedd) == XED_CATEGORY_UNCOND_BR ||
-        xed_decoded_inst_get_category(xedd) == XED_CATEGORY_CALL) {
-        orig_targ_addr = INS_DirectControlFlowTargetAddress(pc);
+    xed_uint_t disp_byts = xed_decoded_inst_get_branch_displacement_width(xedd);
+    if (disp_byts > 0) {
+      xed_int32_t disp = xed_decoded_inst_get_branch_displacement(xedd);
+      orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;
     }
-    
+
     xed_encoder_request_init_from_decode (xedd);
 
     unsigned int new_size = 0;
     xed_error_enum_t xed_error =
-       xed_encode (xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins), 
+       xed_encode (xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins),
                    max_inst_len , &new_size);
     if (xed_error != XED_ERROR_NONE) {
         cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
@@ -253,9 +206,6 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size,
     instr_map[num_of_instr_map_entries].targ_map_entry = -1;
     instr_map[num_of_instr_map_entries].size = new_size;
     instr_map[num_of_instr_map_entries].isRtnHead = isRtnHead;
-    instr_map[num_of_instr_map_entries].isBblHead = isBblHead;
-    instr_map[num_of_instr_map_entries].bbl_num = bbl_num;
-    instr_map[num_of_instr_map_entries].isIndirectBranch = isIndirectBranch;
 
     num_of_instr_map_entries++;
 
@@ -264,34 +214,26 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size,
         return -1;
     }
 
-    if (KnobVerbose) {
-        cerr << "    new instr:";
-        dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins,
-                            instr_map[num_of_instr_map_entries-1].new_ins_addr);
-    }
-
     return new_size;
 }
-
-
 
 /*************************************************/
 /* chain_all_direct_br_and_call_target_entries() */
 /*************************************************/
-void chain_all_direct_br_and_call_target_entries()
+void chain_all_direct_br_and_call_target_entries(unsigned from_entry,
+                                                 unsigned until_entry)
 {
-    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
-        if (instr_map[i].orig_targ_addr != 0) {
-            auto it = addr_to_bbl_num.find(instr_map[i].orig_targ_addr);
-            if (it != addr_to_bbl_num.end()) {
-                // Find the instruction map entry for this BBL head
-                for(unsigned j = 0; j < num_of_instr_map_entries; ++j) {
-                    if(instr_map[j].isBblHead && instr_map[j].orig_ins_addr == it->first) {
-                         instr_map[i].targ_map_entry = j;
-                         break;
-                    }
-                }
-            }
+    entry_map.clear();
+    for (unsigned i = from_entry; i < until_entry; i++) {
+        ADDRINT orig_ins_addr = instr_map[i].orig_ins_addr;
+        if (orig_ins_addr) {
+            entry_map.emplace(orig_ins_addr, i);
+        }
+    }
+    for (unsigned i = from_entry; i < until_entry; i++) {
+        ADDRINT orig_targ_addr = instr_map[i].orig_targ_addr;
+        if (orig_targ_addr != 0 && entry_map.count(orig_targ_addr)) {
+            instr_map[i].targ_map_entry = entry_map[orig_targ_addr];
         }
     }
 }
@@ -315,35 +257,27 @@ int fix_rip_displacement(int instr_map_entry)
 {
     xed_decoded_inst_t xedd;
     xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+    xed_decode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), max_inst_len);
 
-    xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), max_inst_len);
-    if (xed_code != XED_ERROR_NONE) {
-        return -1;
-    }
-
-    if (instr_map[instr_map_entry].orig_targ_addr != 0)  // a direct jmp or call instruction.
-        return 0;
+    if (instr_map[instr_map_entry].orig_targ_addr != 0) return 0;
 
     unsigned int memops = xed_decoded_inst_number_of_memory_operands(&xedd);
-    if(memops == 0) return 0;
-    
-    xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(&xedd,0);
-    if (base_reg != XED_REG_RIP) return 0;
+    if(memops == 0 || xed_decoded_inst_get_base_reg(&xedd,0) != XED_REG_RIP) return 0;
 
     xed_int64_t disp = xed_decoded_inst_get_memory_displacement(&xedd,0);
-    unsigned int orig_size = xed_decoded_inst_get_length(&xedd);
-    
+    xed_decoded_inst_t xedd_orig;
+    xed_decoded_inst_zero_set_mode(&xedd_orig, &dstate);
+    xed_decode(&xedd_orig, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].orig_ins_addr), max_inst_len);
+    unsigned int orig_size = xed_decoded_inst_get_length(&xedd_orig);
+
     xed_int64_t new_disp = instr_map[instr_map_entry].orig_ins_addr + disp + orig_size;
-    xed_uint_t new_disp_byts = 4;
 
     xed_encoder_request_init_from_decode(&xedd);
     xed_encoder_request_set_base0(&xedd, XED_REG_INVALID);
-    xed_encoder_request_set_memory_displacement(&xedd, new_disp, new_disp_byts);
-    
-    unsigned int new_size = 0;
-    xed_error_enum_t xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), XED_MAX_INSTRUCTION_BYTES, &new_size);
-    if (xed_error != XED_ERROR_NONE) return -1;
+    xed_encoder_request_set_memory_displacement(&xedd, new_disp, 4);
 
+    unsigned int new_size = 0;
+    xed_encode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), XED_MAX_INSTRUCTION_BYTES, &new_size);
     return new_size;
 }
 
@@ -352,10 +286,8 @@ int fix_rip_displacement(int instr_map_entry)
 /**************************************/
 int fix_direct_br_or_call_displacement(int instr_map_entry)
 {
-    if (instr_map[instr_map_entry].size == 0 || instr_map[instr_map_entry].orig_targ_addr == 0)
+    if (instr_map[instr_map_entry].size == 0 || instr_map[instr_map_entry].orig_targ_addr == 0 || instr_map[instr_map_entry].targ_map_entry < 0)
         return 0;
-
-    if (instr_map[instr_map_entry].targ_map_entry < 0) return 0; // External branch
 
     xed_decoded_inst_t xedd;
     xed_decoded_inst_zero_set_mode(&xedd,&dstate);
@@ -369,10 +301,9 @@ int fix_direct_br_or_call_displacement(int instr_map_entry)
 
     unsigned int new_size = 0;
     xed_encode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), XED_MAX_INSTRUCTION_BYTES, &new_size);
-    
+
     return new_size;
 }
-
 
 /************************************/
 /* fix_instructions_displacements() */
@@ -382,22 +313,29 @@ int fix_instructions_displacements()
     int size_diff;
     do {
         size_diff = 0;
-        for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
-            instr_map[i].new_ins_addr += size_diff;
+        set_estimated_new_ins_addrs_in_tc(); // Recalculate addresses at the start of each pass
 
-            int new_size = fix_rip_displacement(i);
-            if (new_size > 0 && (unsigned int)new_size != instr_map[i].size) {
-                size_diff += (new_size - instr_map[i].size);
-                instr_map[i].size = new_size;
+        for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
+            int old_size = instr_map[i].size;
+            int new_size = old_size;
+
+            int rip_new_size = fix_rip_displacement(i);
+            if (rip_new_size > 0) {
+                new_size = rip_new_size;
             }
 
-            new_size = fix_direct_br_or_call_displacement(i);
-            if (new_size > 0 && (unsigned int)new_size != instr_map[i].size) {
-                size_diff += (new_size - instr_map[i].size);
+            int br_new_size = fix_direct_br_or_call_displacement(i);
+            if (br_new_size > 0) {
+                new_size = br_new_size;
+            }
+            
+            if(new_size != old_size){
                 instr_map[i].size = new_size;
+                size_diff += (new_size - old_size);
             }
         }
     } while (size_diff != 0);
+    set_estimated_new_ins_addrs_in_tc(); // Final address calculation
     return 0;
 }
 
@@ -405,159 +343,50 @@ int fix_instructions_displacements()
 /*****************************************/
 /* find_candidate_rtns_for_translation() */
 /*****************************************/
-int find_candidate_rtns_for_translation(IMG img)
+VOID find_candidate_rtns_for_translation(RTN rtn, VOID *v)
 {
-    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
+    if (rtn == RTN_Invalid()) return;
+    
+    RTN_Open(rtn);
+    
+    unsigned rtn_entry = num_of_instr_map_entries;
+
+    for (BBL bbl = RTN_BblHead(rtn); BBL_Valid(bbl); bbl = BBL_Next(bbl))
     {
-        if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
-            continue;
+        ADDRINT bbl_addr = BBL_Address(bbl);
+        if (addr_to_bbl_num.find(bbl_addr) == addr_to_bbl_num.end()) {
+            if (bbl_total >= MAX_BBL_NUM) continue;
+            addr_to_bbl_num[bbl_addr] = bbl_total;
+            bbl_addr_map[bbl_total] = bbl_addr;
+            bbl_total++;
+        }
+        UINT32 current_bbl_num = addr_to_bbl_num[bbl_addr];
+        
+        INS head = BBL_InsHead(bbl);
+        INS_InsertCall(head, IPOINT_BEFORE, (AFUNPTR)CountBbl, IARG_UINT32, current_bbl_num, IARG_END);
 
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
+        for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins))
         {
-            if (rtn == RTN_Invalid()) continue;
-            RTN_Open(rtn);
+            xed_decoded_inst_t xedd;
+            xed_decode(&xedd, reinterpret_cast<const UINT8*>(INS_Address(ins)), INS_Size(ins));
+            add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), (RTN_Address(rtn) == INS_Address(ins)));
+        }
 
-            for (BBL bbl = RTN_BblHead(rtn); BBL_Valid(bbl); bbl = BBL_Next(bbl))
-            {
-                ADDRINT bbl_addr = BBL_Address(bbl);
-                if (addr_to_bbl_num.find(bbl_addr) == addr_to_bbl_num.end())
-                {
-                    if (bbl_total >= MAX_BBL_NUM) continue;
-                    addr_to_bbl_num[bbl_addr] = bbl_total;
-                    bbl_addr_map[bbl_total] = bbl_addr;
-                    bbl_num_map[bbl_total] = bbl_total;
-                    bbl_total++;
-                }
-                unsigned int current_bbl_num = addr_to_bbl_num[bbl_addr];
+        INS tail = BBL_InsTail(bbl);
+        if (INS_IsConditionalBranch(tail)) {
+            INS_InsertCall(tail, IPOINT_TAKEN_BRANCH, (AFUNPTR)CountTaken, IARG_UINT32, current_bbl_num, IARG_END);
+            INS_InsertCall(tail, IPOINT_AFTER, (AFUNPTR)CountFallthrough, IARG_UINT32, current_bbl_num, IARG_END);
+        }
 
-                // Instrument BBL execution count
-                xed_encoder_instruction_t enc_instr;
-                xed_encoder_request_t enc_req;
-                char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-                unsigned int olen = 0;
-                
-                // inc qword ptr [bbl_exec_count + current_bbl_num*8]
-                xed_inst1(&enc_instr, dstate, XED_ICLASS_INC, 64, xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bbl_exec_count[current_bbl_num], 64), 64));
-                xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-                xed_decoded_inst_t xedd_inc;
-                xed_decode(&xedd_inc, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                add_new_instr_entry(&xedd_inc, 0, olen, false, true, current_bbl_num);
-
-
-                for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins))
-                {
-                    xed_decoded_inst_t xedd;
-                    xed_decode(&xedd, reinterpret_cast<const UINT8*>(INS_Address(ins)), INS_Size(ins));
-
-                    if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins))
-                    {
-                        // Save registers
-                        add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), false, false, current_bbl_num, true);
-                        
-                        // Save RAX, RBX, RCX
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), xed_reg(XED_REG_RAX));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-                        
-                        save_reg(XED_REG_RBX, (ADDRINT)&rbx_mem);
-                        save_reg(XED_REG_RCX, (ADDRINT)&rcx_mem);
-                        
-                        // Convert jmp to MOV RAX, target
-                        xed_decoded_inst_t* xedd_orig = INS_XedDec(ins);
-                        xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd_orig, 0);
-                        xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd_orig, 0);
-                        xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd_orig, 0);
-                        xed_uint_t scale = xed_decoded_inst_get_scale(xedd_orig, 0);
-                        
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RAX), xed_mem_bisd(base_reg, index_reg, scale, xed_disp(disp, 32), 64));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-                        // MOV RBX, RAX
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RBX), xed_reg(XED_REG_RAX));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-                        // AND RAX, 3
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_AND, 64, xed_reg(XED_REG_RAX), xed_imm0(3, 8));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-                        // MOV RCX, &indirect_targets[bbl_num][0]
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RCX), xed_imm0((UINT64)&indirect_targets[current_bbl_num][0], 64));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-                        // MOV [RCX + RAX*8], RBX
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64), xed_reg(XED_REG_RBX));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-                        
-                        // Increment count
-                        // MOV RCX, &indirect_counts[bbl_num][0]
-                         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RCX), xed_imm0((UINT64)&indirect_counts[current_bbl_num][0], 64));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-                        
-                        // inc qword ptr [RCX + RAX*8]
-                        xed_inst1(&enc_instr, dstate, XED_ICLASS_INC, 64, xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-
-                        // Restore registers
-                        restore_reg(XED_REG_RCX, (ADDRINT)&rcx_mem);
-                        restore_reg(XED_REG_RBX, (ADDRINT)&rbx_mem);
-                        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64, xed_reg(XED_REG_RAX), xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate); xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                        xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen); xed_decode(&xedd, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                        add_new_instr_entry(&xedd, 0, olen, false, false, 0);
-                    }
-                    else
-                    {
-                         add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), (RTN_Address(rtn) == INS_Address(ins)), false, current_bbl_num);
-                    }
-                }
-                
-                // Instrument taken/fall-through
-                INS last_ins = BBL_InsTail(bbl);
-                if(INS_IsDirectControlFlow(last_ins) && INS_HasFallThrough(last_ins)) {
-                    // Instrument taken
-                    xed_inst1(&enc_instr, dstate, XED_ICLASS_INC, 64, xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&taken_count[current_bbl_num], 64), 64));
-                    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-                    xed_decoded_inst_t xedd_taken;
-                    xed_decode(&xedd_taken, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                    // Insert before the branch
-                    num_of_instr_map_entries--;
-                    add_new_instr_entry(&xedd_taken, 0, olen, false, false, 0);
-                    add_new_instr_entry(INS_XedDec(last_ins), INS_Address(last_ins), INS_Size(last_ins), false, false, current_bbl_num);
-
-
-                    // Instrument fall-through
-                    xed_inst1(&enc_instr, dstate, XED_ICLASS_INC, 64, xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&fallthru_count[current_bbl_num], 64), 64));
-                     xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-                    xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), sizeof(encoded_ins), &olen);
-                    xed_decoded_inst_t xedd_fall;
-                    xed_decode(&xedd_fall, reinterpret_cast<UINT8*>(encoded_ins), olen);
-                    add_new_instr_entry(&xedd_fall, 0, olen, false, false, 0);
-                }
-            }
-            RTN_Close(rtn);
+        [cite_start]if (INS_IsIndirectControlFlow(tail) && !INS_IsRet(tail) && !INS_IsCall(tail)) { // [cite: 4]
+            INS_InsertCall(tail, IPOINT_BEFORE, (AFUNPTR)RecordIndirect,
+                           IARG_UINT32, current_bbl_num,
+                           IARG_BRANCH_TARGET_ADDR,
+                           IARG_END);
         }
     }
-    return 0;
+    RTN_Close(rtn);
+    chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
 }
 
 /***************************/
@@ -568,6 +397,9 @@ int copy_instrs_to_tc()
     int cursor = 0;
     for (unsigned i=0; i < num_of_instr_map_entries; i++) {
       if ((ADDRINT)&tc[cursor] != instr_map[i].new_ins_addr) {
+          cerr << "ERROR: Non-matching instruction addresses: "
+               << hex << (ADDRINT)&tc[cursor]
+               << " vs. " << instr_map[i].new_ins_addr << endl;
           return -1;
       }
       memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
@@ -586,11 +418,13 @@ inline void commit_translated_routines()
         if (!instr_map[i].isRtnHead) continue;
         RTN rtn = RTN_FindByAddress(instr_map[i].orig_ins_addr);
         if (RTN_Valid(rtn) && RTN_IsSafeForProbedReplacement(rtn)) {
-            RTN_ReplaceProbed(rtn, (AFUNPTR)instr_map[i].new_ins_addr);
+            AFUNPTR new_fun = (AFUNPTR)instr_map[i].new_ins_addr;
+            if (RTN_ReplaceProbed(rtn, new_fun) == NULL) {
+                cerr << "RTN_ReplaceProbed failed for " << RTN_Name(rtn) << endl;
+            }
         }
     }
 }
-
 
 /****************************/
 /* allocate_and_init_memory */
@@ -599,21 +433,28 @@ int allocate_and_init_memory(IMG img)
 {
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
     {
-        if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
-            continue;
+        if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec)) continue;
+        if (!lowest_sec_addr || lowest_sec_addr > SEC_Address(sec))
+            lowest_sec_addr = SEC_Address(sec);
+        if (highest_sec_addr < SEC_Address(sec) + SEC_Size(sec))
+            highest_sec_addr = SEC_Address(sec) + SEC_Size(sec);
+
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
         {
             max_ins_count += RTN_NumIns(rtn);
         }
     }
 
-    max_ins_count *= 20;
+    max_ins_count *= 1.5;
 
     instr_map = (instr_map_t *)calloc(max_ins_count, sizeof(instr_map_t));
     if (instr_map == NULL) return -1;
 
     int pagesize = sysconf(_SC_PAGE_SIZE);
-    unsigned tclen = 20 * (highest_sec_addr - lowest_sec_addr) + pagesize;
+    if (pagesize == -1) return -1;
+
+    ADDRINT text_size = highest_sec_addr - lowest_sec_addr;
+    unsigned tclen = 2 * text_size + pagesize;
     tc = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     if (tc == MAP_FAILED) return -1;
     
@@ -644,7 +485,7 @@ bool compare_bbl_data(const BBL_DATA& a, const BBL_DATA& b) {
 
 VOID Fini(INT32 code, VOID* v)
 {
-    outfile.open("ex4.csv");
+    outfile.open("bb-profile.csv");
     vector<BBL_DATA> bbl_data_list;
 
     for (unsigned i = 0; i < bbl_total; ++i) {
@@ -683,31 +524,45 @@ VOID Fini(INT32 code, VOID* v)
 VOID ExitInProbeMode(INT code)
 {
     Fini(code, 0);
-    (*origExit)(code);
+    if(origExit) (*origExit)(code);
+    exit(code);
 }
 
 VOID ImageLoad(IMG img, VOID *v)
-{   
+{
     if (!IMG_IsMainExecutable(img)) return;
 
     RTN exitRtn = RTN_FindByName(img, "_exit");
     if (RTN_Valid(exitRtn) && RTN_IsSafeForProbedReplacement(exitRtn)) {
       origExit = (EXITFUNCPTR)RTN_ReplaceProbed(exitRtn, AFUNPTR(ExitInProbeMode));
     }
-    
-    if (allocate_and_init_memory(img) < 0) return;
-    if (find_candidate_rtns_for_translation(img) < 0) return;
-    chain_all_direct_br_and_call_target_entries();
-    set_estimated_new_ins_addrs_in_tc();
-    if (fix_instructions_displacements() < 0) return;
-    set_estimated_new_ins_addrs_in_tc(); // Recalculate addresses after fixing
-    if (copy_instrs_to_tc() < 0) return;
+
+    if (allocate_and_init_memory(img) < 0) {
+        cerr << "failed to initialize memory for translation\n";
+        return;
+    }
+
+    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+        if (!SEC_IsExecutable(sec)) continue;
+        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
+            find_candidate_rtns_for_translation(rtn, v);
+        }
+    }
+
+    if (fix_instructions_displacements() < 0) {
+        cerr << "failed to fix displacments of translated instructions\n";
+        return;
+    }
+
+    if (copy_instrs_to_tc() < 0) {
+        cerr << "failed to copy the instructions to the translation cache\n";
+        return;
+    }
+
     if (!KnobDoNotCommitTranslatedCode) {
       commit_translated_routines();
     }
 }
-
-
 
 /* ===================================================================== */
 /* Print Help Message                                                    */
