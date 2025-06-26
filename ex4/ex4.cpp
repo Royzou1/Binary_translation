@@ -93,54 +93,6 @@ unsigned max_ins_count = 0;
 std::map<ADDRINT, unsigned> entry_map;
 
 /* ============================================================= */
-/* Service dump routines                                         */
-/* ============================================================= */
-
-/************************/
-/* dump_instr_from_mem */
-/************************/
-void dump_instr_from_mem (ADDRINT *address, ADDRINT new_addr)
-{
-  char disasm_buf[2048];
-  xed_decoded_inst_t new_xedd;
-
-  xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
-
-  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
-
-  if (xed_code != XED_ERROR_NONE){
-      cerr << "invalid opcode" << endl;
-      return;
-  }
-
-  xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(new_addr), 0, 0);
-
-  cerr << "0x" << hex << new_addr << ": " << disasm_buf <<  endl;
-}
-
-/**************************/
-/* dump_instr_map_entry */
-/**************************/
-void dump_instr_map_entry(int instr_map_entry)
-{
-    cerr << dec << instr_map_entry << ": ";
-    cerr << " orig_ins_addr: " << hex << instr_map[instr_map_entry].orig_ins_addr;
-    cerr << " new_ins_addr: " << hex << instr_map[instr_map_entry].new_ins_addr;
-    cerr << " orig_targ_addr: " << hex << instr_map[instr_map_entry].orig_targ_addr;
-
-    ADDRINT new_targ_addr;
-    if (instr_map[instr_map_entry].targ_map_entry >= 0)
-        new_targ_addr = instr_map[instr_map[instr_map_entry].targ_map_entry].new_ins_addr;
-    else
-        new_targ_addr = instr_map[instr_map_entry].orig_targ_addr;
-
-    cerr << " new_targ_addr: " << hex << new_targ_addr;
-    cerr << "    new instr:";
-    dump_instr_from_mem((ADDRINT *)instr_map[instr_map_entry].encoded_ins, instr_map[instr_map_entry].new_ins_addr);
-}
-
-
-/* ============================================================= */
 /* Analysis routines                                             */
 /* ============================================================= */
 
@@ -164,7 +116,17 @@ VOID RecordIndirect(UINT32 bbl_num, ADDRINT target_addr) {
             return;
         }
     }
-    // If all slots are full, do nothing for simplicity. A more complex scheme could be LRU.
+    // If all slots are full, find the least frequent one to replace.
+    UINT64 min_count = indirect_counts[bbl_num][0];
+    int min_idx = 0;
+    for (int i = 1; i < 4; i++) {
+        if (indirect_counts[bbl_num][i] < min_count) {
+            min_count = indirect_counts[bbl_num][i];
+            min_idx = i;
+        }
+    }
+    indirect_targets[bbl_num][min_idx] = target_addr;
+    indirect_counts[bbl_num][min_idx] = 1;
 }
 
 
@@ -265,6 +227,8 @@ int fix_rip_displacement(int instr_map_entry)
     if(memops == 0 || xed_decoded_inst_get_base_reg(&xedd,0) != XED_REG_RIP) return 0;
 
     xed_int64_t disp = xed_decoded_inst_get_memory_displacement(&xedd,0);
+
+    // To get original size, we need to decode original instruction
     xed_decoded_inst_t xedd_orig;
     xed_decoded_inst_zero_set_mode(&xedd_orig, &dstate);
     xed_decode(&xedd_orig, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].orig_ins_addr), max_inst_len);
@@ -313,29 +277,29 @@ int fix_instructions_displacements()
     int size_diff;
     do {
         size_diff = 0;
-        set_estimated_new_ins_addrs_in_tc(); // Recalculate addresses at the start of each pass
+        set_estimated_new_ins_addrs_in_tc();
 
         for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
             int old_size = instr_map[i].size;
             int new_size = old_size;
 
             int rip_new_size = fix_rip_displacement(i);
-            if (rip_new_size > 0) {
+            if (rip_new_size > 0 && (unsigned int)rip_new_size != instr_map[i].size) {
                 new_size = rip_new_size;
             }
 
             int br_new_size = fix_direct_br_or_call_displacement(i);
-            if (br_new_size > 0) {
+            if (br_new_size > 0 && (unsigned int)br_new_size != instr_map[i].size) {
                 new_size = br_new_size;
             }
-            
+
             if(new_size != old_size){
                 instr_map[i].size = new_size;
                 size_diff += (new_size - old_size);
             }
         }
     } while (size_diff != 0);
-    set_estimated_new_ins_addrs_in_tc(); // Final address calculation
+    set_estimated_new_ins_addrs_in_tc();
     return 0;
 }
 
@@ -345,23 +309,27 @@ int fix_instructions_displacements()
 /*****************************************/
 VOID find_candidate_rtns_for_translation(RTN rtn, VOID *v)
 {
-    if (rtn == RTN_Invalid()) return;
-    
+    if (RTN_Invalid() == rtn) return;
+
     RTN_Open(rtn);
-    
+
     unsigned rtn_entry = num_of_instr_map_entries;
 
     for (BBL bbl = RTN_BblHead(rtn); BBL_Valid(bbl); bbl = BBL_Next(bbl))
     {
         ADDRINT bbl_addr = BBL_Address(bbl);
         if (addr_to_bbl_num.find(bbl_addr) == addr_to_bbl_num.end()) {
-            if (bbl_total >= MAX_BBL_NUM) continue;
+            if (bbl_total >= MAX_BBL_NUM) {
+                // If we are out of space, we can't profile this BBL.
+                // We should also not translate it to avoid inconsistency.
+                continue;
+            }
             addr_to_bbl_num[bbl_addr] = bbl_total;
             bbl_addr_map[bbl_total] = bbl_addr;
             bbl_total++;
         }
         UINT32 current_bbl_num = addr_to_bbl_num[bbl_addr];
-        
+
         INS head = BBL_InsHead(bbl);
         INS_InsertCall(head, IPOINT_BEFORE, (AFUNPTR)CountBbl, IARG_UINT32, current_bbl_num, IARG_END);
 
@@ -378,7 +346,7 @@ VOID find_candidate_rtns_for_translation(RTN rtn, VOID *v)
             INS_InsertCall(tail, IPOINT_AFTER, (AFUNPTR)CountFallthrough, IARG_UINT32, current_bbl_num, IARG_END);
         }
 
-        [cite_start]if (INS_IsIndirectControlFlow(tail) && !INS_IsRet(tail) && !INS_IsCall(tail)) { // [cite: 4]
+        if (INS_IsIndirectControlFlow(tail) && !INS_IsRet(tail) && !INS_IsCall(tail)) { // [cite: 4]
             INS_InsertCall(tail, IPOINT_BEFORE, (AFUNPTR)RecordIndirect,
                            IARG_UINT32, current_bbl_num,
                            IARG_BRANCH_TARGET_ADDR,
@@ -445,7 +413,7 @@ int allocate_and_init_memory(IMG img)
         }
     }
 
-    max_ins_count *= 1.5;
+    max_ins_count *= 2; // Estimate for new instructions
 
     instr_map = (instr_map_t *)calloc(max_ins_count, sizeof(instr_map_t));
     if (instr_map == NULL) return -1;
@@ -454,10 +422,10 @@ int allocate_and_init_memory(IMG img)
     if (pagesize == -1) return -1;
 
     ADDRINT text_size = highest_sec_addr - lowest_sec_addr;
-    unsigned tclen = 2 * text_size + pagesize;
+    unsigned tclen = 3 * text_size + pagesize;
     tc = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     if (tc == MAP_FAILED) return -1;
-    
+
     return 0;
 }
 
@@ -465,7 +433,7 @@ int allocate_and_init_memory(IMG img)
 /* ============================================ */
 /* Main translation routine                     */
 /* ============================================ */
-typedef VOID (*EXITFUNCPTR)(INT code);
+typedef VOID (*EXITFUNCPTR)(INT32 code, VOID *v);
 EXITFUNCPTR origExit;
 
 
@@ -495,10 +463,20 @@ VOID Fini(INT32 code, VOID* v)
             data.exec_count = bbl_exec_count[i];
             data.taken = taken_count[i];
             data.fallthru = fallthru_count[i];
-            
+
             for(int j=0; j<4; ++j) {
                 if(indirect_counts[i][j] > 0) {
-                    data.indirects.push_back({indirect_targets[i][j], indirect_counts[i][j]});
+                    // Check for duplicates before adding
+                    bool found = false;
+                    for(auto const& [addr, count] : data.indirects) {
+                        if (addr == indirect_targets[i][j]) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if(!found) {
+                       data.indirects.push_back({indirect_targets[i][j], indirect_counts[i][j]});
+                    }
                 }
             }
             bbl_data_list.push_back(data);
@@ -506,7 +484,7 @@ VOID Fini(INT32 code, VOID* v)
     }
 
     sort(bbl_data_list.begin(), bbl_data_list.end(), compare_bbl_data);
-    
+
     for(const auto& data : bbl_data_list) {
         outfile << "0x" << hex << data.address << ", "
                 << dec << data.exec_count << ", "
@@ -521,36 +499,29 @@ VOID Fini(INT32 code, VOID* v)
     outfile.close();
 }
 
-VOID ExitInProbeMode(INT code)
-{
-    Fini(code, 0);
-    if(origExit) (*origExit)(code);
-    exit(code);
-}
 
 VOID ImageLoad(IMG img, VOID *v)
 {
     if (!IMG_IsMainExecutable(img)) return;
 
-    RTN exitRtn = RTN_FindByName(img, "_exit");
-    if (RTN_Valid(exitRtn) && RTN_IsSafeForProbedReplacement(exitRtn)) {
-      origExit = (EXITFUNCPTR)RTN_ReplaceProbed(exitRtn, AFUNPTR(ExitInProbeMode));
-    }
+    // We will use a Fini function to handle program exit, so replacing _exit is not needed in probe mode
+    // unless we need to do something very specific before the application's own _exit runs.
+    // PIN_AddFiniFunction is generally safer.
 
     if (allocate_and_init_memory(img) < 0) {
         cerr << "failed to initialize memory for translation\n";
         return;
     }
 
-    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-        if (!SEC_IsExecutable(sec)) continue;
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-            find_candidate_rtns_for_translation(rtn, v);
-        }
-    }
+    // Use RTN_AddInstrumentFunction to instrument routines as they are discovered
+    RTN_AddInstrumentFunction(find_candidate_rtns_for_translation, 0);
+}
 
+VOID AppStart(VOID *v)
+{
+    // Now that all routines are instrumented and mapped, perform the translation steps
     if (fix_instructions_displacements() < 0) {
-        cerr << "failed to fix displacments of translated instructions\n";
+        cerr << "failed to fix displacements of translated instructions\n";
         return;
     }
 
@@ -569,7 +540,7 @@ VOID ImageLoad(IMG img, VOID *v)
 /* ===================================================================== */
 INT32 Usage()
 {
-    cerr << "This tool translated routines of an Intel(R) 64 binary" << endl;
+    cerr << "This tool profiles basic blocks and translates routines of an Intel(R) 64 binary" << endl;
     cerr << KNOB_BASE::StringKnobSummary();
     cerr << endl;
     return -1;
@@ -584,8 +555,15 @@ int main(int argc, char * argv[])
 {
     if( PIN_Init(argc,argv) ) return Usage();
     PIN_InitSymbols();
+
     IMG_AddInstrumentFunction(ImageLoad, 0);
+
+    // Register a function to be called when the application starts.
+    // This is where we will do the final code translation after all routines have been seen.
+    PIN_AddApplicationStartFunction(AppStart, 0);
     PIN_AddFiniFunction(Fini, 0);
+
     PIN_StartProgramProbed();
+
     return 0;
 }
