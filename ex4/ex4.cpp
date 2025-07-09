@@ -22,13 +22,9 @@ extern "C" {
 #include <algorithm>
 
 #define MAX_BBL_NUM 10000
-static uint64_t bb_map_mem[MAX_BBL_NUM]         = {0};
-static ADDRINT  bb_addr_mem[MAX_BBL_NUM]        = {0};
-static uint64_t taken_counts[MAX_BBL_NUM]       = {0};
-static uint64_t fallthrough_counts[MAX_BBL_NUM] = {0};
-static std::map<ADDRINT, uint64_t> indirect_target_counts[MAX_BBL_NUM];
-static unsigned bbl_num = 0;
-static uint64_t rax_scratch = 0;  // shared scratch slot for RAX preservation
+static uint64_t bb_map_mem[MAX_BBL_NUM] = {0}; 
+static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
+ static unsigned bbl_num = 0;
 
 using namespace std;
 
@@ -36,7 +32,6 @@ std::ofstream outfile;
 
 // Data structure to store basic block counts
 std::map<ADDRINT, UINT64> bbl_counts;
-
 
 
 /*======================================================================*/
@@ -698,145 +693,139 @@ int fix_instructions_displacements()
     } while (size_diff != 0);
 
    return 0;
-}
+ }
 
 
-VOID RecordIndirectCount(UINT32 idx, ADDRINT target) {
-    bb_map_mem[idx]++;
-    indirect_target_counts[idx][target]++;
-}
-
-
-
-///-----------------------------------------------------------------------------
-// Helper: emit a 5-instr XED sequence to ++*counter_ptr, preserving RAX
-//-----------------------------------------------------------------------------  
-void EmitIncrement(ADDRINT counter_ptr, xed_state_t &dstate) {
-    xed_encoder_request_t enc_req;
-    xed_decoded_inst_t   xedd_instr;
-    xed_encoder_instruction_t enc_instr;
-    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-    unsigned ilen = XED_MAX_INSTRUCTION_BYTES;
-    unsigned olen = 0;
-
-    // Save RAX: MOV [rax_scratch], RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_scratch,64), 64),
-              xed_reg(XED_REG_RAX));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
-    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-
-    // Load counter: MOV RAX, [counter_ptr]
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
-              xed_mem_bd(XED_REG_INVALID, xed_disp(counter_ptr,64), 64));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
-    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-
-    // Increment: LEA RAX, [RAX + 1]
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-              xed_reg(XED_REG_RAX),
-              xed_mem_bd(XED_REG_RAX, xed_disp(1,8), 64));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
-    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-
-    // Store back: MOV [counter_ptr], RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp(counter_ptr,64), 64),
-              xed_reg(XED_REG_RAX));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
-    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-
-    // Restore RAX: MOV RAX, [rax_scratch]
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_scratch,64), 64));
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    xed_convert_to_encoder_request(&enc_req, &enc_instr);
-    xed_encode(&enc_req, (uint8_t*)encoded_ins, ilen, &olen);
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    xed_decode(&xedd_instr, (uint8_t*)encoded_ins, olen);
-    add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-}
-
-//-----------------------------------------------------------------------------
-// Updated Ex4 translation callback (probe mode)
-//-----------------------------------------------------------------------------
+/*****************************************/
+/* find_candidate_rtns_for_translation() */
+/*****************************************/
 int find_candidate_rtns_for_translation(IMG img)
 {
-    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+    int rc;
+
+    for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
+    {
         if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
             continue;
 
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-            if (rtn == RTN_Invalid()) continue;
+        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
+        {
+            if (rtn == RTN_Invalid()) {
+                cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
+                continue;
+            }
+
+            unsigned rtn_entry = num_of_instr_map_entries;
             RTN_Open(rtn);
 
             INS prev = INS_Invalid();
-            unsigned thisBbl = 0;
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-                // Decode instruction for xedd
-                xed_decoded_inst_t xedd;
-                xed_decoded_inst_zero_set_mode(&xedd, &dstate);
-                xed_error_enum_t xed_code = xed_decode(&xedd,
-                                        (uint8_t*)INS_Address(ins), max_inst_len);
-                if (xed_code != XED_ERROR_NONE) return -1;
 
-                // 1) Basic-block head? instrument entry count
-                bool isBBHead = !INS_Valid(prev) || INS_IsControlFlow(prev);
-                if (isBBHead) {
-                    thisBbl = bbl_num;
-                    bb_addr_mem[thisBbl] = INS_Address(ins);
-                    EmitIncrement((ADDRINT)&bb_map_mem[thisBbl], dstate);
+                if (KnobVerbose) {
+                    cerr << "old instr: ";
+                    cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
+                }
+
+                ADDRINT addr = INS_Address(ins);
+
+                xed_decoded_inst_t xedd;
+                xed_error_enum_t xed_code;
+
+                xed_decoded_inst_zero_set_mode(&xedd, &dstate);
+                xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
+                if (xed_code != XED_ERROR_NONE) {
+                    cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+                    return -1;
+                }
+
+                bool isRtnHead = (RTN_Address(rtn) == addr);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
+                if (rc < 0) {
+                    cerr << "ERROR: failed during instruction translation." << endl;
+                    return -1;
+                }
+
+                //detect start of a basic block
+                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
+
+                if (isInsStartsBBL) {
+                    xed_encoder_instruction_t enc_instr;
+                    xed_encoder_request_t enc_req;
+                    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+                    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+                    unsigned int olen = 0;
+                    static uint64_t rax_mem;
+
+                    bb_addr_mem[bbl_num] = INS_Address(ins);
+
+                    for (int i = 0; i < 5; i++) {
+                        if (i == 0)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 1)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
+                        else if (i == 2)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+                        else if (i == 3)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 4)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+
+                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+                        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
+                            cerr << "conversion to encode request failed\n";
+                            return -1;
+                        }
+
+                        xed_error_enum_t xed_error = xed_encode(&enc_req,
+                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+                        if (xed_error != XED_ERROR_NONE) {
+                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+                            return -1;
+                        }
+
+                        xed_decoded_inst_t xedd_instr;
+                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
+                            cerr << "xed decode failed at: 0x" << hex << addr << endl;
+                            return -1;
+                        }
+
+                        rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+                        if (rc < 0) {
+                            cerr << "instruction translation failed\n";
+                            return -1;
+                        }
+                    }
+
                     bbl_num++;
                 }
 
-                // 2) Conditional branch: taken vs. fall-through
-                if (INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
-                    EmitIncrement((ADDRINT)&taken_counts[thisBbl], dstate);
-                    EmitIncrement((ADDRINT)&fallthrough_counts[thisBbl], dstate);
-                }
+                prev = ins; // update previous instruction
+            }
 
-                // 3) Indirect branch/call: record target via probe-mode callback
-                #pragma GCC diagnostic push
-                #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-                if (INS_IsIndirectBranchOrCall(ins)) {
-                #pragma GCC diagnostic pop
-                    // Use a named analysis function instead of a lambda
-                   INS_InsertCall(ins, IPOINT_BEFORE,
-               AFUNPTR(RecordIndirectCount),
-               IARG_UINT32, thisBbl,
-               IARG_BRANCH_TARGET_ADDR,
-               IARG_END);
-                }
-
-                prev = ins;
+            if (KnobVerbose) {
+                cerr << "rtn name: " << RTN_Name(rtn) << endl;
             }
 
             RTN_Close(rtn);
+
+            chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
         }
     }
+
     return 0;
 }
-
-
 
 /***************************/
 /* int copy_instrs_to_tc() */
@@ -989,52 +978,6 @@ bool cmp(const std::pair<ADDRINT, UINT64>& a, const std::pair<ADDRINT, UINT64>& 
 VOID Fini(INT32 code, VOID* v)
 {
 
-    cerr << "FINI called with " << code << endl;
-    outfile.open("bb-profile.csv");
-
-    std::vector<std::tuple<ADDRINT, uint64_t, unsigned>> bbl_info;
-
-    for (unsigned i = 0; i < bbl_num; ++i) {
-    cerr << "BB[" << i << "] addr = " << hex << bb_addr_mem[i]
-     << " count = " << dec << bb_map_mem[i] << endl;
-        if (bb_map_mem[i] > 0) {
-            bbl_info.emplace_back(bb_addr_mem[i], bb_map_mem[i], i);
-        }
-    }
-
-    //sorting by execution count descending
-    std::sort(bbl_info.begin(), bbl_info.end(),
-              [](const std::tuple<ADDRINT, uint64_t, unsigned>& a,
-                 const std::tuple<ADDRINT, uint64_t, unsigned>& b) {
-                    return std::get<1>(a) > std::get<1>(b);
-              });
-
-    for (const auto& tup : bbl_info) {
-        ADDRINT addr = std::get<0>(tup);
-        uint64_t exec_count = std::get<1>(tup);
-        unsigned idx = std::get<2>(tup);
-
-        outfile << std::hex << addr << ", "
-                << std::dec << exec_count << ", "
-                << taken_counts[idx] << ", "
-                << fallthrough_counts[idx];
-
-        // this is for the indirect target counts (up to 4)
-        unsigned printed = 0;
-        for (const auto& target : indirect_target_counts[idx]) {
-            if (printed++ >= 4) break;
-            outfile << ", " << std::hex << target.first
-                    << ", " << std::dec << target.second;
-        }
-
-        outfile << std::endl;
-    }
-
-    outfile.close();
-
-
-
-/*
     outfile.open("bb-profile.csv");
 
     // Vector to store pairs of address and count
@@ -1058,8 +1001,23 @@ VOID Fini(INT32 code, VOID* v)
     }
 
     outfile.close();
-*/
 
+/*
+    std::vector<std::pair<ADDRINT, UINT64>> sorted_bbls(bbl_counts.begin(), bbl_counts.end());
+
+    // Sort blocks by frequency (descending)
+    std::sort(sorted_bbls.begin(), sorted_bbls.end(), cmp);
+
+    // Write to CSV file
+    outfile.open("bb-profile.csv");
+    for (auto& entry : sorted_bbls) {
+        outfile << std::hex << entry.first << ", " << std::dec << entry.second << std::endl;
+    }
+
+    outfile.close();
+    
+    //cerr << "Reached _exit." << endl;
+    */
 }
 
 VOID ExitInProbeMode(INT code)
