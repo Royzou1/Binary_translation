@@ -29,12 +29,12 @@ extern "C" {
 #define MAX_TARG 4 //up to 4 targets for each indirect jumps for each basic block
 
 static unsigned bbl_num = 0;
-static uint64_t rax_mem, rbx_mem, rcx_mem;;
+static uint64_t rax_mem; //rbx_mem, rcx_mem;;
 
 //static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
 
-static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
-static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
+//static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
+//static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
 
 struct bbl_profile {
  
@@ -52,8 +52,8 @@ struct bbl_profile {
     bbl_profile(){ //initialize the bbl profile info 
         addr= 0;
         exec_counter= 0;
-        takenCount = 0;
-        fallthroughCount = 0;
+        taken_num = 0;
+        fallthrough_num = 0;
 
         is_direct_jmp = false;
         is_indirect_jmp = false;
@@ -65,7 +65,7 @@ struct bbl_profile {
     }
 };
 
-static bbl_profile bb_map_mem[MAX_BBL_NUM] = {0}; 
+static bbl_profile bb_map_mem[MAX_BBL_NUM]; 
 
 using namespace std;
 
@@ -703,7 +703,7 @@ int fix_instructions_displacements()
             instr_map[i].new_ins_addr += size_diff;
 
 
-            // fix rip displacement:
+            // fix rip displacement:F
             int new_size = fix_rip_displacement(i);
             if (new_size < 0)
                 return -1;
@@ -734,82 +734,10 @@ int fix_instructions_displacements()
    return 0;
 }
 
-int insert_cmd(xed_encoder_instruction_t & enc_instr) {
-    xed_encoder_request_t enc_req;
-    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
-    unsigned int olen = 0;
 
-    xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-    if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-        cerr << "conversion to encode request failed\n";
-        return -1;
-    }
 
-    xed_error_enum_t xed_error = xed_encode(&enc_req,
-                reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
-    if (xed_error != XED_ERROR_NONE) {
-        cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-        return -1;
-    }
-
-    xed_decoded_inst_t xedd_instr;
-    xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-    if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
-        cerr << "xed decode failed at: 0x" << hex << addr << endl;
-        return -1;
-    }
-
-    rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-    if (rc < 0) {
-        cerr << "instruction translation failed\n";
-        return -1;
-    }
-
-    return 0;
-}
-
-int emit_start_bbl(ADDRINT addr) {
-    xed_encoder_instruction_t enc_instr;
-    static uint64_t rax_mem;
-
-    // Save the start address of this basic block in the profile
-    bb_map_mem[bbl_num].addr = addr;
-
-    // (a) Save RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-        xed_reg(XED_REG_RAX));
-    if (insert_cmd(&enc_instr) == -1) return -1;
-
-    // (b) Load exec_counter into RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RAX),
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num].exec_counter, 64), 64));
-    if (insert_cmd(&enc_instr) == -1) return -1;
-
-    // (c) RAX = RAX + 1
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-        xed_reg(XED_REG_RAX),
-        xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-    if (insert_cmd(&enc_instr) == -1) return -1;
-
-    // (d) Store RAX back into exec_counter
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num].exec_counter, 64), 64),
-        xed_reg(XED_REG_RAX));
-    if (insert_cmd(&enc_instr) == -1) return -1;
-
-    // (e) Restore original RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RAX),
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-    if (insert_cmd(&enc_instr) == -1) return -1;
-
-    return 0;
-}
-
-int emit_end_BBL() {
+/*
+int emit_end_bbl() {
     // Retrieve the details about the indirect jmp operands of ‘INS ins’:
     xed_decoded_inst_t *xedd = INS_XedDec(ins);
     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
@@ -870,7 +798,65 @@ int emit_end_BBL() {
     //pop rcx
     return 0;
 }
+*/
 
+int emit_start_bbl(xed_state_t* dstate, UINT64* counter_ptr)
+{
+    xed_encoder_instruction_t enc_instr;
+    xed_encoder_request_t enc_req;
+    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+    unsigned int olen = 0;
+
+    for (int i = 0; i < 5; i++) {
+        if (i == 0) {
+            // Save RAX to rax_mem
+            xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                      xed_reg(XED_REG_RAX));
+        } else if (i == 1) {
+            // Load counter value into RAX
+            xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                      xed_reg(XED_REG_RAX),
+                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_ptr, 64), 64));
+        } else if (i == 2) {
+            // Increment RAX
+            xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
+                      xed_reg(XED_REG_RAX),
+                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+        } else if (i == 3) {
+            // Store updated RAX back to counter_ptr
+            xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_ptr, 64), 64),
+                      xed_reg(XED_REG_RAX));
+        } else if (i == 4) {
+            // Restore RAX from rax_mem
+            xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                      xed_reg(XED_REG_RAX),
+                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+        }
+
+        xed_encoder_request_zero_set_mode(&enc_req, dstate);
+        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr))
+            return -1;
+
+        xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+        if (xed_error != XED_ERROR_NONE)
+            return -1;
+
+        xed_decoded_inst_t xedd;
+        xed_decoded_inst_zero_set_mode(&xedd, dstate);
+        if (xed_decode(&xedd, reinterpret_cast<UINT8*>(&encoded_ins), olen) != XED_ERROR_NONE)
+            return -1;
+
+        int rc = add_new_instr_entry(&xedd, 0x0, olen, false);
+        if (rc < 0) {
+            cerr << "ERROR: failed to add counter increment instruction" << endl;
+            return -1;
+        }
+    }
+    return 0;
+}
 
 /*****************************************/
 /* find_candidate_rtns_for_translation() */
@@ -926,23 +912,14 @@ int find_candidate_rtns_for_translation(IMG img)
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
                 if (isInsStartsBBL) {
-                    if (emit_start_bbl(addr) == -1)
-                        return -1;
+                       emit_start_bbl(&dstate, &bb_map_mem[bbl_num].exec_counter); //count the exec nums of each basic block 
+                        bb_map_mem[bbl_num].addr = addr;  
 
-                        bb_map_mem[bbl_num].addr = addr;  // Set the address of the current BBL
-
-                        if (bbl_num > 0 && INS_Valid(prev_ins)) {
-                            // Check if this instruction is the fallthrough of the previous direct branch
-                            if (INS_IsDirectControlFlow(prev_ins) &&
-                                addr == (INS_Address(prev_ins) + INS_Size(prev_ins))) {
-                        
-                                bb_map_mem[bbl_num - 1].is_direct_jmp = true;
-                        
-                                rc = EmitIncrementLogic(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
-                                if (rc < 0) {
-                                    cerr << "ERROR: failed to generate fallthrough increment instructions" << endl;
-                                    return -1;
-                                }
+                        if (bbl_num > 0 && INS_Valid(prev)) { //check if the prev ins is valid and we are in a basic block
+                            if (INS_IsDirectControlFlow(prev) && addr == (INS_Address(prev) + INS_Size(prev))) {
+                                bb_map_mem[bbl_num - 1].is_direct_jmp = true; 
+                                if(emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num)== -1) //since we based on addr didnt jump- increment the fallthrough
+                                	return -1;
                             }
                         }                        
                 }
@@ -951,8 +928,8 @@ int find_candidate_rtns_for_translation(IMG img)
                             INS_IsRet(ins)) && !INS_IsCall(ins);
 
                 if (isTerminateBBL) {
-                    if (emit_end_bbl() == -1)
-                        return -1;
+                 //   if (emit_end_bbl() == -1)
+                   //     return -1;
 
                     bbl_num++;
                 }
@@ -1151,9 +1128,13 @@ VOID Fini(INT32 code, VOID* v)
 
     // Emit the sorted results
     for (const auto& bbl : non_zero_bbls) {
+        // Compute taken_num from exec_counter and fallthrough
+        UINT64 computed_taken = bbl->exec_counter > bbl->fallthrough_num ?
+                                bbl->exec_counter - bbl->fallthrough_num : 0;
+
         outfile << std::hex << bbl->addr << std::dec
                 << ", " << bbl->exec_counter
-                << ", " << bbl->taken_num
+                << ", " << computed_taken
                 << ", " << bbl->fallthrough_num;
 
         if (bbl->is_indirect_jmp) {
@@ -1172,6 +1153,7 @@ VOID Fini(INT32 code, VOID* v)
 
     outfile.close();
 }
+
 
 
 VOID ExitInProbeMode(INT code)
