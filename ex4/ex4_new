@@ -21,17 +21,56 @@ extern "C" {
 #include <vector>
 #include <algorithm>
 
+/* ===================================================================== */
+/*Our Own Global Variables */
+/* ===================================================================== */
+
 #define MAX_BBL_NUM 10000
-static uint64_t bb_map_mem[MAX_BBL_NUM] = {0}; 
-static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
- static unsigned bbl_num = 0;
+#define MAX_TARG 4 //up to 4 targets for each indirect jumps for each basic block
+
+static unsigned bbl_num = 0;
+static uint64_t rax_mem, rbx_mem, rcx_mem;;
+
+//static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
+
+static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
+static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
+
+struct bbl_profile {
+ 
+    ADDRINT addr;        //the address of the basic block
+    UINT64 exec_counter;       //count the execution num
+    UINT64 taken_num;      //num of times the jump was taken
+    UINT64 fallthrough_num ; //num of times the jump wasn't taken (fallthrough)
+
+    bool is_direct_jmp; //checking if the inst is a direct jump 
+    bool is_indirect_jmp;    //checking if the inst is a indirect jump
+
+    ADDRINT target_addr[MAX_TARG];
+    UINT64 targ_exec_count[MAX_TARG];
+
+    bbl_profile(){ //initialize the bbl profile info 
+        addr= 0;
+        exec_counter= 0;
+        takenCount = 0;
+        fallthroughCount = 0;
+
+        is_direct_jmp = false;
+        is_indirect_jmp = false;
+
+        for (int i = 0; i< MAX_TARG; i++){
+            target_addr[i] = 0;
+            targ_exec_count[i] = 0;
+        }
+    }
+};
+
+static bbl_profile bb_map_mem[MAX_BBL_NUM] = {0}; 
 
 using namespace std;
 
 std::ofstream outfile;
 
-// Data structure to store basic block counts
-std::map<ADDRINT, UINT64> bbl_counts;
 
 
 /*======================================================================*/
@@ -730,38 +769,43 @@ int insert_cmd(xed_encoder_instruction_t & enc_instr) {
     return 0;
 }
 
-int emit_start_bbl() {
+int emit_start_bbl(ADDRINT addr) {
     xed_encoder_instruction_t enc_instr;
     static uint64_t rax_mem;
 
-    bb_addr_mem[bbl_num] = INS_Address(ins);
+    // Save the start address of this basic block in the profile
+    bb_map_mem[bbl_num].addr = addr;
 
-    
+    // (a) Save RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
         xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
         xed_reg(XED_REG_RAX));
-    if(insert_cmd(&enc_instr) == -1) return -1;
+    if (insert_cmd(&enc_instr) == -1) return -1;
 
+    // (b) Load exec_counter into RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(XED_REG_RAX),
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
-    if(insert_cmd(&enc_instr) == -1) return -1;
-    
+        xed_reg(XED_REG_RAX),
+        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num].exec_counter, 64), 64));
+    if (insert_cmd(&enc_instr) == -1) return -1;
+
+    // (c) RAX = RAX + 1
     xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-                xed_reg(XED_REG_RAX),
-                xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-    if(insert_cmd(&enc_instr) == -1) return -1;
+        xed_reg(XED_REG_RAX),
+        xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+    if (insert_cmd(&enc_instr) == -1) return -1;
 
+    // (d) Store RAX back into exec_counter
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
+        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num].exec_counter, 64), 64),
         xed_reg(XED_REG_RAX));
-    if(insert_cmd(&enc_instr) == -1) return -1;
-    
+    if (insert_cmd(&enc_instr) == -1) return -1;
+
+    // (e) Restore original RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
         xed_reg(XED_REG_RAX),
         xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-    if(insert_cmd(&enc_instr) == -1) return -1;
-    
+    if (insert_cmd(&enc_instr) == -1) return -1;
+
     return 0;
 }
 
@@ -794,12 +838,12 @@ int emit_end_BBL() {
     //store rax
     //store rbx
     //store rcx
-    if (targ_reg != XED_REG_INVALID) { //jump targ_reg
+  //  if (targ_reg != XED_REG_INVALID) { //jump targ_reg
         //rax = targ_reg    
-    }
-    else { //jmp [<base_reg> + <disp> + <index_reg> * <scale>]
+    //}
+    //else { //jmp [<base_reg> + <disp> + <index_reg> * <scale>]
         //rax = [<base_reg> + <disp> + <index_reg> * <scale>]
-    }
+   // }
     // rcx = 0
     //L1: 
     // load rbx address[bbl_num][rcx]
@@ -824,9 +868,10 @@ int emit_end_BBL() {
     //pop rax
     //pop rbx
     //pop rcx
+    return 0;
 }
 
-int
+
 /*****************************************/
 /* find_candidate_rtns_for_translation() */
 /*****************************************/
@@ -881,8 +926,25 @@ int find_candidate_rtns_for_translation(IMG img)
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
                 if (isInsStartsBBL) {
-                    if (emit_start_bbl() == -1)
+                    if (emit_start_bbl(addr) == -1)
                         return -1;
+
+                        bb_map_mem[bbl_num].addr = addr;  // Set the address of the current BBL
+
+                        if (bbl_num > 0 && INS_Valid(prev_ins)) {
+                            // Check if this instruction is the fallthrough of the previous direct branch
+                            if (INS_IsDirectControlFlow(prev_ins) &&
+                                addr == (INS_Address(prev_ins) + INS_Size(prev_ins))) {
+                        
+                                bb_map_mem[bbl_num - 1].is_direct_jmp = true;
+                        
+                                rc = EmitIncrementLogic(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
+                                if (rc < 0) {
+                                    cerr << "ERROR: failed to generate fallthrough increment instructions" << endl;
+                                    return -1;
+                                }
+                            }
+                        }                        
                 }
 
                 bool isTerminateBBL = (INS_IsIndirectControlFlow(ins) || INS_IsDirectControlFlow(ins) || 
@@ -1062,48 +1124,55 @@ bool cmp(const std::pair<ADDRINT, UINT64>& a, const std::pair<ADDRINT, UINT64>& 
 
 VOID Fini(INT32 code, VOID* v)
 {
-
     outfile.open("bb-profile.csv");
 
-    // Vector to store pairs of address and count
-    std::vector<std::pair<ADDRINT, uint64_t>> sorted_bbls;
+    // Vector to store tuples of bbl address and pointer to profile
+    std::vector<bbl_profile*> non_zero_bbls;
 
+    // Collect all non-zero execution bbls
     for (unsigned i = 0; i < bbl_num; ++i) {
-        if (bb_map_mem[i] > 0) {  // <-- Only include non-zero execution counts
-            sorted_bbls.emplace_back(bb_addr_mem[i], bb_map_mem[i]);
+        if (bb_map_mem[i].exec_counter > 0) {
+            non_zero_bbls.push_back(&bb_map_mem[i]);
         }
     }
 
-    // Sort in descending order (most executed first)
-    std::sort(sorted_bbls.begin(), sorted_bbls.end(),
-        [](const std::pair<ADDRINT, uint64_t>& a, const std::pair<ADDRINT, uint64_t>& b) {
-            return a.second > b.second;
+    // Sort by exec_counter descending
+    std::sort(non_zero_bbls.begin(), non_zero_bbls.end(),
+        [](const bbl_profile* a, const bbl_profile* b) {
+            return a->exec_counter > b->exec_counter;
         });
 
-    // Write results as: <address>, <exec count>
-    for (const auto& entry : sorted_bbls) {
-        outfile << std::hex << entry.first << ", " << std::dec << entry.second << endl;
+    // Print header (optional)
+    outfile << "BBL Address, Exec Count, Taken Count, Fallthrough Count";
+    for (int i = 0; i < MAX_TARG; ++i) {
+        outfile << ", Target Addr " << (i + 1) << ", Target Exec Count " << (i + 1);
+    }
+    outfile << endl;
+
+    // Emit the sorted results
+    for (const auto& bbl : non_zero_bbls) {
+        outfile << std::hex << bbl->addr << std::dec
+                << ", " << bbl->exec_counter
+                << ", " << bbl->taken_num
+                << ", " << bbl->fallthrough_num;
+
+        if (bbl->is_indirect_jmp) {
+            for (int i = 0; i < MAX_TARG; ++i) {
+                outfile << ", 0x" << std::hex << bbl->target_addr[i]
+                        << ", " << std::dec << bbl->targ_exec_count[i];
+            }
+        } else {
+            for (int i = 0; i < MAX_TARG; ++i) {
+                outfile << ", 0x0, 0";
+            }
+        }
+
+        outfile << endl;
     }
 
     outfile.close();
-
-/*
-    std::vector<std::pair<ADDRINT, UINT64>> sorted_bbls(bbl_counts.begin(), bbl_counts.end());
-
-    // Sort blocks by frequency (descending)
-    std::sort(sorted_bbls.begin(), sorted_bbls.end(), cmp);
-
-    // Write to CSV file
-    outfile.open("bb-profile.csv");
-    for (auto& entry : sorted_bbls) {
-        outfile << std::hex << entry.first << ", " << std::dec << entry.second << std::endl;
-    }
-
-    outfile.close();
-    
-    //cerr << "Reached _exit." << endl;
-    */
 }
+
 
 VOID ExitInProbeMode(INT code)
 {
