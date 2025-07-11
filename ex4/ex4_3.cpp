@@ -1099,7 +1099,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         ADDRINT next_inst_addr = (ADDRINT)tc;
                         for (size_t j = 0; j < num_of_instr_map_entries; ++j)
                             next_inst_addr += instr_map[j].size;
-                        emit_end_bbl(&dstate, ins, next_inst_addr)
+                        emit_end_bbl(&dstate, ins, next_inst_addr);
                     }
                 bbl_num++;
                 //in_bbl = false;
