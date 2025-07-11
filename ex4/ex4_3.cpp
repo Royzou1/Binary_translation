@@ -920,21 +920,21 @@ int emit_end_bbl(xed_state_t* dstate,
         ADD_INST(XED_ICLASS_CMP,64,
                  xed_reg(XED_REG_RBX),
                  xed_imm0(0, 8));
-        ADD_JMP(LBL_L2, XED_ICLASS_JE, 32);
+        ADD_JMP(LBL_L2, XED_ICLASS_JZ, 32);
         // if rbx == rax → L3
         ADD_INST(XED_ICLASS_CMP,64,
                  xed_reg(XED_REG_RBX),
                  xed_reg(XED_REG_RAX));
-        ADD_JMP(LBL_L3, XED_ICLASS_JE, 32);
+        ADD_JMP(LBL_L3, XED_ICLASS_JZ, 32);
         // rcx++
         ADD_INST(XED_ICLASS_ADD,64,
                  xed_reg(XED_REG_RCX),
                  xed_imm0(1, 8));
         // if rcx == Max_Target → L4
         ADD_INST(XED_ICLASS_CMP,64,
-                 xed_reg(XED_REG_RCX),
-                 xed_imm0(Max_Target, 8));
-        ADD_JMP(LBL_L4, XED_ICLASS_JE, 32);
+                  xed_reg(XED_REG_RCX),
+                  xed_imm0(MAX_TARG, 8));
+        ADD_JMP(LBL_L4, XED_ICLASS_JZ, 32);
         // JMP back to L1
         ADD_JMP(LBL_L1, XED_ICLASS_JMP, 32);
     }
@@ -1008,7 +1008,7 @@ int emit_end_bbl(xed_state_t* dstate,
             ADDRINT next_ip = addr[i] + lengths[i];
             ADDRINT rel    = target - next_ip;
             // rebuild jump with correct displacement
-            xed_iclass_enum_t ic = xed_inst_get_iclass(&entries[i].inst);
+            xed_iclass_enum_t ic = xed_inst_iclass(&entries[i].inst);
             xed_inst1(&entries[i].inst, *dstate, ic, 0, xed_relbr(rel, 32));
         }
     }
@@ -1098,7 +1098,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         bb_map_mem[bbl_num].is_indirect_jmp = true;
                         ADDRINT next_inst_addr = (ADDRINT)tc;
                         for (size_t j = 0; j < num_of_instr_map_entries; ++j)
-                            next_inst_addr += instr_map[j].length;
+                            next_inst_addr += instr_map[j].size;
                         emit_end_bbl(&dstate, ins, next_inst_addr)
                     }
                 bbl_num++;
