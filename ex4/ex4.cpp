@@ -1000,6 +1000,8 @@ int find_candidate_rtns_for_translation(IMG img)
             RTN_Open(rtn);
 
             INS prev = INS_Invalid();
+            
+//            bool in_bbl = false;
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
@@ -1027,40 +1029,41 @@ int find_candidate_rtns_for_translation(IMG img)
                     return -1;
                 }
 
-                //detect start of a basic block
-                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
-
-                if (isInsStartsBBL) {
-                       emit_start_bbl(&dstate, &bb_map_mem[bbl_num].exec_counter); //count the exec nums of each basic block 
-                        bb_map_mem[bbl_num].addr = addr;  
-
-                        if (bbl_num > 0 && INS_Valid(prev)) { //check if the prev ins is valid and we are in a basic block
-                            if (INS_IsDirectControlFlow(prev) && addr == (INS_Address(prev) + INS_Size(prev))) {
-                                bb_map_mem[bbl_num - 1].is_direct_jmp = true;
-                                
-                                if(emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num)== -1) //since we based on addr didnt jump- increment the fallthrough
-                                	return -1;
-                            } 
-                        } 
-                                                 
-
-                bool isTerminateBBL = (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins));
-
-                if (isTerminateBBL) {
-                cerr<<"am i in here????????"<< hex<< addr << endl;
-                   bb_map_mem[bbl_num].is_indirect_jmp = true;
-                  
-                 //  if (emit_end_bbl(&dstate, ins, bbl_num)  == -1) {
-       	//	 cerr << "ERROR: emit_end_bbl failed at instruction 0x" << hex << INS_Address(ins) << endl;
-      		//	 return -1;
-    		//	}  
-                }
                 
-                 bbl_num++; 
-                
-                }
+                 bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
+		  
+		  if (isStart) {
+			//in_bbl = true;
+			emit_start_bbl(&dstate, &bb_map_mem[bbl_num].exec_counter);
+			bb_map_mem[bbl_num].addr = addr;
 
-                prev = ins; // update previous instruction
+			// Check for fallthrough from previous instruction
+			if (bbl_num > 0 && INS_Valid(prev)) {
+			    if (INS_IsDirectControlFlow(prev) &&
+				addr == (INS_Address(prev) + INS_Size(prev))) {
+				bb_map_mem[bbl_num - 1].is_direct_jmp = true;
+				emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
+			    }
+			}
+		    }
+
+		   
+		    // Mark this instruction as ending the current basic block
+		   if (INS_IsControlFlow(ins)) {
+			if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+			    bb_map_mem[bbl_num].is_indirect_jmp = true;
+			}
+
+			// Properly finalize this BBL here
+			// emit_end_bbl(&dstate, ins, bbl_num); // optional
+
+			bbl_num++;
+			//in_bbl = false;
+		    }
+
+		   prev = ins;
+                
+                
             }
 
             if (KnobVerbose) {
