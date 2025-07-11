@@ -824,9 +824,35 @@ int encode_and_add_instr(xed_encoder_instruction_t* enc_instr, xed_state_t* dsta
 // Refactored emit_end_bbl: two‑pass encoding with jump placeholders
 int emit_end_bbl(xed_state_t* dstate,
                  INS ins,
-                 unsigned bbl_num,
                  ADDRINT next_inst_addr)
 {
+    // — Extract the indirect‐jump operand info —
+    xed_reg_enum_t targ_reg     = XED_REG_INVALID;
+    xed_reg_enum_t base_reg     = XED_REG_INVALID;
+    xed_reg_enum_t index_reg    = XED_REG_INVALID;
+    ADDRINT         disp         = 0;
+    uint32_t        scale        = 0;
+    uint32_t        width        = 32;   // displacement width in bits
+    uint32_t        mem_addr_width = 64; // memory operand width in bits
+
+    if (INS_MemoryOperandCount(ins) > 0) {
+        base_reg  = static_cast<xed_reg_enum_t>(INS_MemoryBaseReg(ins));
+        index_reg = static_cast<xed_reg_enum_t>(INS_MemoryIndexReg(ins));
+        scale     = INS_MemoryScale(ins);
+        disp      = INS_MemoryDisplacement(ins);
+    } else {
+        // indirect via register — pick up the first source reg
+        REG r = INS_RegR(ins, 0);
+        switch (r) {
+          case REG_RAX: targ_reg = XED_REG_RAX; break;
+          case REG_RBX: targ_reg = XED_REG_RBX; break;
+          case REG_RCX: targ_reg = XED_REG_RCX; break;
+          case REG_RDX: targ_reg = XED_REG_RDX; break;
+          // …add others as needed…
+          default: break;
+        }
+    }
+
     // Define labels
     enum { LBL_NONE=0, LBL_L1=1, LBL_L2, LBL_L3, LBL_L4 };
 
