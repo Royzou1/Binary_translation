@@ -1105,7 +1105,8 @@ int find_candidate_rtns_for_translation(IMG img)
                         ADDRINT next_inst_addr = (ADDRINT)tc;
                         for (size_t j = 0; j < num_of_instr_map_entries; ++j)
                             next_inst_addr += instr_map[j].size;
-                        cerr << "Indirect Was triggered in tc line: " << hex << next_inst_addr << endl;
+                        cerr << "Indirect Was triggered in entry num: " << num_of_instr_map_entries << endl;
+                        cerr << "It shoud be in line num: " << hex << next_inst_addr << endl;
                         emit_end_bbl(&dstate, ins, next_inst_addr);
                     }
                 bbl_num++;
