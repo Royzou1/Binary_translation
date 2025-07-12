@@ -999,18 +999,24 @@ int emit_end_bbl(xed_state_t* dstate,
     for (int i = 0; i < count; ++i)
         addr[i+1] = addr[i] + lengths[i];
 
-    // ------- Second pass: fix up jump displacements -------
+    // --- Second pass: fix up jump displacements ---
     for (int i = 0; i < count; ++i) {
         int lbl = entries[i].label_target;
-        if (lbl != LBL_NONE) {
-            ADDRINT target = addr[ label_pos[lbl] ];
-            // next_ip = instr_addr + inst_length
-            ADDRINT next_ip = addr[i] + lengths[i];
-            ADDRINT rel    = target - next_ip;
-            // rebuild jump with correct displacement
-            xed_iclass_enum_t ic = xed_inst_iclass(&entries[i].inst);
-            xed_inst1(&entries[i].inst, *dstate, ic, 0, xed_relbr(rel, 32));
-        }
+        if (lbl == LBL_NONE) continue;
+
+        ADDRINT target  = addr[label_pos[lbl]];
+        ADDRINT next_ip = addr[i] + lengths[i];
+        ADDRINT rel     = target - next_ip;
+
+        /* Convert the existing encoder instruction into an encoder-request
+        and query its iclass */
+        xed_encoder_request_t tmp_req;
+        xed_encoder_request_zero_set_mode(&tmp_req, dstate);
+        xed_convert_to_encoder_request(&tmp_req, &entries[i].inst);
+        xed_iclass_enum_t ic = xed_encoder_request_get_iclass(&tmp_req);
+
+        /* Re-build the instruction with the real displacement */
+        xed_inst1(&entries[i].inst, *dstate, ic, 0, xed_relbr(rel, 32));
     }
 
     // ------- Emit all -------
