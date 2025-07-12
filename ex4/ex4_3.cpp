@@ -880,6 +880,7 @@ int emit_end_bbl(xed_state_t* dstate,
         count++;                                                               \
     } while(0)
 
+    cerr << "building inst list" <<endl;
     // -------- Build instruction list --------
     // 1) save caller regs
     ADD_INST(XED_ICLASS_MOV, 64,
@@ -999,6 +1000,7 @@ int emit_end_bbl(xed_state_t* dstate,
     for (int i = 0; i < count; ++i)
         addr[i+1] = addr[i] + lengths[i];
 
+    cerr << "Fixing jmps" << endl;
     // --- Second pass: fix up jump displacements ---
     for (int i = 0; i < count; ++i) {
         int lbl = entries[i].label_target;
@@ -1020,6 +1022,7 @@ int emit_end_bbl(xed_state_t* dstate,
     }
 
     // ------- Emit all -------
+    cerr << "Emiting all" << endll;
     for (int i = 0; i < count; ++i) {
         if (encode_and_add_instr(&entries[i].inst, dstate) < 0)
             return -1;
