@@ -988,9 +988,10 @@ int find_candidate_rtns_for_translation(IMG img)
                             cerr << "instruction translation failed\n";
                             return -1;
                         }
+                        cerr << "encoded " << i << endl;
+                        cerr.flush();
                     }
-                    cerr << "encoded " << i << endl;
-                    cerr.flush();
+                    
                 }
                 
                 cerr << "Calc is prev Terminate" << endl;
