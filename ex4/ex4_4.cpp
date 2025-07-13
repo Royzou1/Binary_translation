@@ -27,6 +27,7 @@ extern "C" {
 static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
 static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
 static uint64_t bb_map_fall_count[MAX_BBL_NUM]={0};
+static bool isPrevInsTerminates = false;
 
 static uint64_t bb_map_mem[MAX_BBL_NUM] = {0}; 
 static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
@@ -989,13 +990,6 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
                 
                 cerr << "Calc is prev Terminate" << endl;
-                cerr.flush();  
-                bool isPrevInsTerminates =   (INS_IsIndirectControlFlow(prev) || 
-                                        INS_IsDirectControlFlow(prev) || 
-                                        INS_IsRet(prev)) && 
-                                        !INS_IsCall(prev);
-                cerr << "done Calc is prev Terminate" << endl;
-                cerr.flush();  
 
                 if (isPrevInsTerminates) {
                     cerr << "not here 10" << endl;
@@ -1080,6 +1074,10 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 }
                 
+                cerr.flush();  
+                isPrevInsTerminates =  isInsTerminateBBL 
+                cerr.flush();  
+
                 prev = ins; // update previous instruction
 
             }
