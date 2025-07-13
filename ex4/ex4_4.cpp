@@ -835,7 +835,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
                     unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
                     unsigned int olen = 0;
-                    static uint64_t rax_mem, rbx_mem, rcx_mem;
+                    static uint64_t rax_mem, rbx_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
                     cerr << "not here 3" << endl;
@@ -987,7 +987,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                                 xed_disp((ADDRINT)&rax_mem, 64), 64));
                         }
                         // now encode and add to your instruction map
-                        xed_encoder_request_zero_set_mode(&enc_req, dstate);
+                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
                         if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
                             cerr << "conversion to encode request failed\n";
                             return -1;
@@ -1001,7 +1001,7 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                         xed_decoded_inst_t xedd_instr;
-                        xed_decoded_inst_zero_set_mode(&xedd_instr, dstate);
+                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
                         if (xed_decode(&xedd_instr,
                                     reinterpret_cast<UINT8*>(encoded_ins),
                                     max_inst_len) != XED_ERROR_NONE) {
