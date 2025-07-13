@@ -767,7 +767,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-
+                    cerr << "Start BBL before loop" << endl;
                     for (int i = 0; i < 5; i++) {
                         if (i == 0)
                             xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
@@ -816,6 +816,7 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                     }
+                    cerr << "Start BBL exit" << endl;
                 }
                 
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
