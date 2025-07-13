@@ -818,12 +818,12 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     cerr << "Start BBL exit" << endl;
                 }
-                
+                cerr << "Calc isTerminate" << endl;
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
-                
+                cerr << "done Calc isTerminate" << endl;
                 
                 if (isInsTerminateBBL) {
                     cerr << "isTerminate" << endl;
@@ -986,11 +986,12 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                 }
                 
+                cerr << "Calc is prev Terminate" << endl;
                 bool isPrevInsTerminates =   (INS_IsIndirectControlFlow(prev) || 
                                         INS_IsDirectControlFlow(prev) || 
                                         INS_IsRet(prev)) && 
                                         !INS_IsCall(prev);
-                
+                cerr << "done Calc is prev Terminate" << endl;
                 if (isPrevInsTerminates) {
                     cerr << "not here 10" << endl;
                     xed_encoder_instruction_t enc_instr;
@@ -1073,7 +1074,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 prev = ins; // update previous instruction
 
             }
-        
+            cerr << "hereee" << endl;
             if (KnobVerbose) {
                 cerr << "rtn name: " << RTN_Name(rtn) << endl;
             }
@@ -1081,6 +1082,7 @@ int find_candidate_rtns_for_translation(IMG img)
             RTN_Close(rtn);
 
             chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
+            cerr << "heree1" << endl;
         }
     }
 
