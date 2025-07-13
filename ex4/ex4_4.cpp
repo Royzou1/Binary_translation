@@ -846,7 +846,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     if (!memops)
                     targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
                     // Debug print.
-                    dump_instr_from_xedd (xedd, ins_addr);
+                    dump_instr_from_xedd (xedd, bb_addr_mem[bbl_num]);
                     cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
                     << " index reg " << xed_reg_enum_t2str(index_reg)
                     << " scale: " << scale
@@ -919,9 +919,9 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                         // 7: RCX++
                         else if (i == 7) {
-                            xed_inst2(&enc_instr, dstate,
-                                    XED_ICLASS_INC, 64,
-                                    xed_reg(XED_REG_RCX));
+                           xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+                                      xed_reg(XED_REG_RCX),
+                                      xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
                         }
                         // 8: store RCX → bb_map_targ_count[bbl_num][RBX]
                         else if (i == 8) {
