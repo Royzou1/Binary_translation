@@ -819,11 +819,13 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "Start BBL exit" << endl;
                 }
                 cerr << "Calc isTerminate" << endl;
+                cerr.flush();  
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
                 cerr << "done Calc isTerminate" << endl;
+                cerr.flush();  
                 
                 if (isInsTerminateBBL) {
                     cerr << "isTerminate" << endl;
@@ -987,13 +989,18 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
                 
                 cerr << "Calc is prev Terminate" << endl;
+                cerr.flush();  
                 bool isPrevInsTerminates =   (INS_IsIndirectControlFlow(prev) || 
                                         INS_IsDirectControlFlow(prev) || 
                                         INS_IsRet(prev)) && 
                                         !INS_IsCall(prev);
                 cerr << "done Calc is prev Terminate" << endl;
+                cerr.flush();  
+
                 if (isPrevInsTerminates) {
                     cerr << "not here 10" << endl;
+                    cerr.flush();  
+                    
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -1003,6 +1010,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
                     cerr << "not here 11" << endl;
+                    cerr.flush();  
                     for (int i = 0; i < 5; i++) {
                         if (i == 0) {
                             // 0: store RAX → [rax_mem]
@@ -1068,6 +1076,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                     }
                     cerr << "not here 12" << endl;
+                    cerr.flush();  
 
                 }
                 
@@ -1075,6 +1084,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
             }
             cerr << "hereee" << endl;
+            cerr.flush();  
             if (KnobVerbose) {
                 cerr << "rtn name: " << RTN_Name(rtn) << endl;
             }
@@ -1083,6 +1093,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
             chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
             cerr << "heree1" << endl;
+            cerr.flush();  
         }
     }
 
