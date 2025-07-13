@@ -835,7 +835,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
                     unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
                     unsigned int olen = 0;
-                    static uint64_t rax_mem, rbx_mem;
+                    static uint64_t rax_mem, rbx_mem, rcx_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
                     cerr << "not here 3" << endl;
@@ -864,7 +864,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     << " targ reg: " << targ_reg << xed_reg_enum_t2str(targ_reg)
                     << "\n";
                     cerr << "not here 4 " << endl;
-                    for (int i = 0; i < 11; ++i) {
+                    for (int i = 0; i < 22; ++i) {
                         cerr << "encoding " << i << endl;
                         cerr.flush();
 
@@ -882,7 +882,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
                                     xed_reg(XED_REG_RBX));
-                            }
+                        }
                         else if (i == 2) {
                             // 2: store RAX → [rbx_mem]
                             xed_inst2(&enc_instr, dstate,
@@ -891,17 +891,31 @@ int find_candidate_rtns_for_translation(IMG img)
                                                 xed_disp((ADDRINT)&rbx_mem, 64), 64),
                                     xed_reg(XED_REG_RAX));
                         }
-
                         else if (i == 3) {
-                            // 2: load [rax_mem] → RAX
+                            // 3: store RCX → RAX
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_reg(XED_REG_RAX),
+                                    xed_reg(XED_REG_RCX));
+                        }
+                        else if (i == 4) {
+                            // 4: store RAX → [rcx_mem]
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rcx_mem, 64), 64),
+                                    xed_reg(XED_REG_RAX));
+                        }
+                        else if (i == 5) {
+                            // 5: load [rax_mem] → RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
                                     xed_mem_bd(XED_REG_INVALID,
                                                 xed_disp((ADDRINT)&rax_mem, 64), 64));
                         }
-                        else if (i == 4) {
-                            // 3: compute jump target → RAX
+                        else if (i == 6) {
+                            // 6: compute jump target → RAX
                             if (targ_reg != XED_REG_INVALID) {
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
@@ -915,77 +929,122 @@ int find_candidate_rtns_for_translation(IMG img)
                                                     xed_disp(disp, width), mem_addr_width));
                             }
                         }
-                        else if (i == 5) {
-                            // 4: RBX ← RAX & 3
-                            //    MOV RBX, RAX
+                        else if (i == 7) {
+                            // 7: RBX ← RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RBX),
                                     xed_reg(XED_REG_RAX));
                         }
-                        else if (i == 6) {
-                            //    AND RBX, 3
+                        else if (i == 8) {
+                            // 8: AND RBX, 3
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_AND, 64,
                                     xed_reg(XED_REG_RBX),
                                     xed_imm0(3, 8));
                         }
-                        else if (i == 7) {
-                            // 5: store RAX → bb_map_targ_addr[bbl_num][RBX]
+                        else if (i == 9) {
+                            // 9: RCX ← &bb_map_targ_addr[bbl_num][0]
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_LEA, 64,
+                                    xed_reg(XED_REG_RCX),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&bb_map_targ_addr[bbl_num][0], 64), 64));
+                        }
+                        else if (i == 10) {
+                            // 10: RCX ← RCX + RBX*8
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_LEA, 64,
+                                    xed_reg(XED_REG_RCX),
+                                    xed_mem_bisd(XED_REG_RCX, XED_REG_RBX, 8,
+                                                xed_disp(0, 64), 64));
+                        }
+                        else if (i == 11) {
+                            // 11: [RCX] ← RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
-                                                xed_disp((ADDRINT)&bb_map_targ_addr[bbl_num][0], 64), 64),
+                                    xed_mem_bd(XED_REG_RCX,
+                                                xed_disp(0, 64), 64),
                                     xed_reg(XED_REG_RAX));
                         }
-                        else if (i == 8) {
-                            // 6: load bb_map_targ_count[bbl_num][RBX] → RAX
+                        else if (i == 12) {
+                            // 12: RCX ← &bb_map_targ_count[bbl_num][0]
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_LEA, 64,
+                                    xed_reg(XED_REG_RCX),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&bb_map_targ_count[bbl_num][0], 64), 64));
+                        }
+                        else if (i == 13) {
+                            // 13: RCX ← RCX + RBX*8
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_LEA, 64,
+                                    xed_reg(XED_REG_RCX),
+                                    xed_mem_bisd(XED_REG_RCX, XED_REG_RBX, 8,
+                                                xed_disp(0, 64), 64));
+                        }
+                        else if (i == 14) {
+                            // 14: RAX ← [RCX]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
-                                    xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
-                                                xed_disp((ADDRINT)&bb_map_targ_count[bbl_num][0], 64), 64));
+                                    xed_mem_bd(XED_REG_RCX,
+                                                xed_disp(0, 64), 64));
                         }
-                        else if (i == 9) {
-                            // 7: RAX++
-                            xed_inst1(&enc_instr, dstate,
-                                    XED_ICLASS_INC, 64,
-                                    xed_reg(XED_REG_RAX));
+                        else if (i == 15) {
+                            // 15: RAX ← RAX + 1
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_ADD, 64,
+                                    xed_reg(XED_REG_RAX),
+                                    xed_imm0(1, 8));
                         }
-                        else if (i == 10) {
-                            // 8: store RAX → bb_map_targ_count[bbl_num][RBX]
+                        else if (i == 16) {
+                            // 16: [RCX] ← RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
-                                                xed_disp((ADDRINT)&bb_map_targ_count[bbl_num][0], 64), 64),
+                                    xed_mem_bd(XED_REG_RCX,
+                                                xed_disp(0, 64), 64),
                                     xed_reg(XED_REG_RAX));
                         }
-                        
-                        else if (i == 11) {
-                            // 10: restore original RBX → RAX
+                        else if (i == 17) {
+                            // 17: RAX ← [rcx_mem]
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_reg(XED_REG_RAX),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rcx_mem, 64), 64));
+                        }
+                        else if (i == 18) {
+                            // 18: RCX ← RAX
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_reg(XED_REG_RCX),
+                                    xed_reg(XED_REG_RAX));
+                        }
+                        else if (i == 19) {
+                            // 19: RAX ← [rbx_mem]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
                                     xed_mem_bd(XED_REG_INVALID,
                                                 xed_disp((ADDRINT)&rbx_mem, 64), 64));
                         }
-
-                        else if (i == 12) {
-                            // 1: move RAX → RBX
+                        else if (i == 20) {
+                            // 20: RBX ← RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RBX),
                                     xed_reg(XED_REG_RAX));
-                            }
-                        
-                        else if (i == 13) {
-                            // 9: restore original RAX → RAX
+                        }
+                        else if (i == 21) {
+                            // 21: RAX ← [rax_mem]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
                                     xed_mem_bd(XED_REG_INVALID,
                                                 xed_disp((ADDRINT)&rax_mem, 64), 64));
                         }
+
                         // now encode and add to your instruction map
                         xed_encoder_request_zero_set_mode(&enc_req, &dstate);
                         if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
