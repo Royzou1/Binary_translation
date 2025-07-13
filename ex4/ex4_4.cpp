@@ -816,7 +816,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                     }
                 }
-
+                /*
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
@@ -1061,7 +1061,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                     }
                 }
-
+                */
                 prev = ins; // update previous instruction
 
             }
