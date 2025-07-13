@@ -981,7 +981,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                 }
 
-                bool isTerminateBBL =   (INS_IsIndirectControlFlow(prev) || 
+                bool isPrevInsTerminates =   (INS_IsIndirectControlFlow(prev) || 
                                         INS_IsDirectControlFlow(prev) || 
                                         INS_IsRet(prev)) && 
                                         !INS_IsCall(prev);
