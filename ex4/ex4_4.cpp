@@ -866,6 +866,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "not here 4 " << endl;
                     for (int i = 0; i < 12; i++) {
                         cerr << "encoding " << i << endl;
+                        cerr.flush();
                         // 0: store RAX → [rax_mem]
                         if (i == 0) {
                             xed_inst2(&enc_instr, dstate,
@@ -988,6 +989,8 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                     }
+                    cerr << "encoded " << i << endl;
+                    cerr.flush();
                 }
                 
                 cerr << "Calc is prev Terminate" << endl;
