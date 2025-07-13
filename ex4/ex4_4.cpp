@@ -865,6 +865,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     << "\n";
                     cerr << "not here 4 " << endl;
                     for (int i = 0; i < 12; i++) {
+                        cerr << "encoding " << i << endl;
                         // 0: store RAX → [rax_mem]
                         if (i == 0) {
                             xed_inst2(&enc_instr, dstate,
@@ -1075,7 +1076,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
                 
                 cerr.flush();  
-                isPrevInsTerminates =  isInsTerminateBBL 
+                isPrevInsTerminates =  isInsTerminateBBL;
                 cerr.flush();  
 
                 prev = ins; // update previous instruction
