@@ -864,32 +864,44 @@ int find_candidate_rtns_for_translation(IMG img)
                     << " targ reg: " << targ_reg << xed_reg_enum_t2str(targ_reg)
                     << "\n";
                     cerr << "not here 4 " << endl;
-                    for (int i = 0; i < 12; i++) {
+                    for (int i = 0; i < 11; ++i) {
                         cerr << "encoding " << i << endl;
                         cerr.flush();
-                        // 0: store RAX → [rax_mem]
+
                         if (i == 0) {
+                            // 0: store RAX → [rax_mem]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rax_mem, 64), 64),
                                     xed_reg(XED_REG_RAX));
                         }
-                        // 1: store RBX → [rbx_mem]
                         else if (i == 1) {
+                            // 1: move RBX → RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
+                                    xed_reg(XED_REG_RAX),
                                     xed_reg(XED_REG_RBX));
-                        }
-                        // 2: store RCX → [rcx_mem]
+                            }
                         else if (i == 2) {
+                            // 2: store RAX → [rbx_mem]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64),
-                                    xed_reg(XED_REG_RCX));
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rbx_mem, 64), 64),
+                                    xed_reg(XED_REG_RAX));
                         }
-                        // 3: compute jump target → RAX
+
                         else if (i == 3) {
+                            // 2: load [rax_mem] → RAX
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_reg(XED_REG_RAX),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rax_mem, 64), 64));
+                        }
+                        else if (i == 4) {
+                            // 3: compute jump target → RAX
                             if (targ_reg != XED_REG_INVALID) {
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
@@ -903,94 +915,109 @@ int find_candidate_rtns_for_translation(IMG img)
                                                     xed_disp(disp, width), mem_addr_width));
                             }
                         }
-                        // 4: RBX ← RAX & 3
-                        else if (i == 4) {
-                            // move mask into RBX, then AND
+                        else if (i == 5) {
+                            // 4: RBX ← RAX & 3
+                            //    MOV RBX, RAX
+                            xed_inst2(&enc_instr, dstate,
+                                    XED_ICLASS_MOV, 64,
+                                    xed_reg(XED_REG_RBX),
+                                    xed_reg(XED_REG_RAX));
+                        }
+                        else if (i == 6) {
+                            //    AND RBX, 3
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_AND, 64,
                                     xed_reg(XED_REG_RBX),
                                     xed_imm0(3, 8));
                         }
-                        // 5: store RAX → bb_map_targ_addr[bbl_num][RBX]
-                        else if (i == 5) {
+                        else if (i == 7) {
+                            // 5: store RAX → bb_map_targ_addr[bbl_num][RBX]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
                                                 xed_disp((ADDRINT)&bb_map_targ_addr[bbl_num][0], 64), 64),
                                     xed_reg(XED_REG_RAX));
                         }
-                        // 6: load bb_map_targ_count[bbl_num][RBX] → RCX
-                        else if (i == 6) {
+                        else if (i == 8) {
+                            // 6: load bb_map_targ_count[bbl_num][RBX] → RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_reg(XED_REG_RCX),
+                                    xed_reg(XED_REG_RAX),
                                     xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
                                                 xed_disp((ADDRINT)&bb_map_targ_count[bbl_num][0], 64), 64));
                         }
-                        // 7: RCX++
-                        else if (i == 7) {
-                           xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-                                      xed_reg(XED_REG_RCX),
-                                      xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
+                        else if (i == 9) {
+                            // 7: RAX++
+                            xed_inst1(&enc_instr, dstate,
+                                    XED_ICLASS_INC, 64,
+                                    xed_reg(XED_REG_RAX));
                         }
-                        // 8: store RCX → bb_map_targ_count[bbl_num][RBX]
-                        else if (i == 8) {
+                        else if (i == 10) {
+                            // 8: store RAX → bb_map_targ_count[bbl_num][RBX]
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_mem_bisd(XED_REG_INVALID, XED_REG_RBX, 8,
                                                 xed_disp((ADDRINT)&bb_map_targ_count[bbl_num][0], 64), 64),
-                                    xed_reg(XED_REG_RCX));
+                                    xed_reg(XED_REG_RAX));
                         }
-                        // 9: load [rax_mem] → RAX
-                        else if (i == 9) {
+                        
+                        else if (i == 11) {
+                            // 10: restore original RBX → RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rbx_mem, 64), 64));
                         }
-                        // 10: load [rbx_mem] → RBX
-                        else if (i == 10) {
+
+                        else if (i == 12) {
+                            // 1: move RAX → RBX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RBX),
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
-                        }
-                        // 11: load [rcx_mem] → RCX
-                        else if (i == 11) {
+                                    xed_reg(XED_REG_RAX));
+                            }
+                        
+                        else if (i == 13) {
+                            // 9: restore original RAX → RAX
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
-                                    xed_reg(XED_REG_RCX),
-                                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64));
+                                    xed_reg(XED_REG_RAX),
+                                    xed_mem_bd(XED_REG_INVALID,
+                                                xed_disp((ADDRINT)&rax_mem, 64), 64));
                         }
-
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+                        // now encode and add to your instruction map
+                        xed_encoder_request_zero_set_mode(&enc_req, dstate);
                         if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
                             cerr << "conversion to encode request failed\n";
                             return -1;
                         }
-
                         xed_error_enum_t xed_error = xed_encode(&enc_req,
-                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+                                                    reinterpret_cast<UINT8*>(encoded_ins),
+                                                    ilen, &olen);
                         if (xed_error != XED_ERROR_NONE) {
-                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+                            cerr << "ENCODE ERROR: "
+                                << xed_error_enum_t2str(xed_error) << endl;
                             return -1;
                         }
-
                         xed_decoded_inst_t xedd_instr;
-                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
+                        xed_decoded_inst_zero_set_mode(&xedd_instr, dstate);
+                        if (xed_decode(&xedd_instr,
+                                    reinterpret_cast<UINT8*>(encoded_ins),
+                                    max_inst_len) != XED_ERROR_NONE) {
                             cerr << "xed decode failed at: 0x" << hex << addr << endl;
                             return -1;
                         }
-
                         rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
                         if (rc < 0) {
                             cerr << "instruction translation failed\n";
                             return -1;
                         }
+
                         cerr << "encoded " << i << endl;
                         cerr.flush();
                     }
+
                     
                 }
                 
