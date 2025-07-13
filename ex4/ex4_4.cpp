@@ -756,6 +756,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
                 if (isInsStartsBBL) {
+                    cerr << "Start BBL" << endl;
                     bbl_num++;
                     
                     xed_encoder_instruction_t enc_instr;
@@ -816,13 +817,15 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                     }
                 }
-                /*
+                
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
-
+                
+                
                 if (isInsTerminateBBL) {
+                    cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -831,7 +834,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem, rbx_mem, rcx_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-                    
+                    cerr << "not here 3" << endl;
                     // Retrieve the details about the indirect jmp operands of ‘INS ins’:
                     xed_decoded_inst_t *xedd = INS_XedDec(ins);
                     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
@@ -843,10 +846,11 @@ int find_candidate_rtns_for_translation(IMG img)
                     unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd,0);
                     xed_reg_enum_t targ_reg = XED_REG_INVALID;
                     unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
+                    cerr << "not here 4" << endl;
                     if (!memops)
                     targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
                     // Debug print.
-                    dump_instr_from_xedd (xedd, bb_addr_mem[bbl_num]);
+                    //dump_instr_from_xedd (xedd, bb_addr_mem[bbl_num]);
                     cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
                     << " index reg " << xed_reg_enum_t2str(index_reg)
                     << " scale: " << scale
@@ -855,7 +859,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     << " mem addr width: " << mem_addr_width
                     << " targ reg: " << targ_reg << xed_reg_enum_t2str(targ_reg)
                     << "\n";
-
+                    cerr << "not here 4 " << endl;
                     for (int i = 0; i < 12; i++) {
                         // 0: store RAX → [rax_mem]
                         if (i == 0) {
@@ -980,13 +984,14 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                     }
                 }
-
+                
                 bool isPrevInsTerminates =   (INS_IsIndirectControlFlow(prev) || 
                                         INS_IsDirectControlFlow(prev) || 
                                         INS_IsRet(prev)) && 
                                         !INS_IsCall(prev);
                 
                 if (isPrevInsTerminates) {
+                    cerr << "not here 10" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -995,7 +1000,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-
+                    cerr << "not here 11" << endl;
                     for (int i = 0; i < 5; i++) {
                         if (i == 0) {
                             // 0: store RAX → [rax_mem]
@@ -1060,8 +1065,10 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                     }
+                    cerr << "not here 12" << endl;
+
                 }
-                */
+                
                 prev = ins; // update previous instruction
 
             }
