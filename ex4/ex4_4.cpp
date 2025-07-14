@@ -871,6 +871,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
                     // Debug print.
                     //dump_instr_from_xedd (xedd, bb_addr_mem[bbl_num]);
+                    cerr << "BBL addr: " << bb_addr_mem[bbl_num] << endl;
                     cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
                     << " index reg " << xed_reg_enum_t2str(index_reg)
                     << " scale: " << scale
