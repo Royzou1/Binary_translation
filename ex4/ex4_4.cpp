@@ -1414,6 +1414,7 @@ VOID Fini(INT32 code, VOID* v)
             outfile << ", 0x" << std::hex << jump.addr
             << ", " << std::dec << jump.count;
         outfile << endl;
+        }
     }
 
     outfile.close();
