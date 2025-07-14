@@ -766,7 +766,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "ERROR: failed during instruction translation." << endl;
                     return -1;
                 }
-
+                
                 //detect start of a basic block
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
@@ -835,15 +835,12 @@ int find_candidate_rtns_for_translation(IMG img)
                     //cerr << "Start BBL exit" << endl;
                 }
                 //cerr << "Calc isTerminate" << endl;
-                cerr.flush();  
-                bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
-                                        INS_IsDirectControlFlow(ins) || 
-                                        INS_IsRet(ins)) && 
-                                        !INS_IsCall(ins);
+
+                bool isInsTerminateBBL = INS_IsControlFlow(ins);
                 //cerr << "done Calc isTerminate" << endl;
                 //cerr.flush();  
                 
-                if (INS_IsIndirectControlFlow(ins)) { 
+                if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { 
                     //cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
