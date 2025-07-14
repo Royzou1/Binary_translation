@@ -771,9 +771,9 @@ int find_candidate_rtns_for_translation(IMG img)
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
 
                 if (isInsStartsBBL) {
-                    cerr << "Start BBL" << endl;
+                    //cerr << "Start BBL" << endl;
                     bbl_num++;
-                    cerr << "BBL is: " << bbl_num << endl;
+                    //cerr << "BBL is: " << bbl_num << endl;
                     
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
@@ -832,20 +832,20 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                     }
-                    cerr << "Start BBL exit" << endl;
+                    //cerr << "Start BBL exit" << endl;
                 }
-                cerr << "Calc isTerminate" << endl;
+                //cerr << "Calc isTerminate" << endl;
                 cerr.flush();  
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
-                cerr << "done Calc isTerminate" << endl;
+                //cerr << "done Calc isTerminate" << endl;
                 cerr.flush();  
                 
                 if (INS_IsIndirectControlFlow(ins)) {
                     
-                    cerr << "isTerminate" << endl;
+                    //cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -1096,11 +1096,11 @@ int find_candidate_rtns_for_translation(IMG img)
 
                     
                 }
-                cerr << "Calc is prev Terminate" << endl;
+                //cerr << "Calc is prev Terminate" << endl;
                 
                 
                 if (isPrevInsTerminates) {
-                    cerr << "not here 10" << endl;
+                    //cerr << "not here 10" << endl;
                     cerr.flush();  
                     
                     xed_encoder_instruction_t enc_instr;
@@ -1111,7 +1111,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-                    cerr << "not here 11" << endl;
+                    //cerr << "not here 11" << endl;
                     cerr.flush();  
                     for (int i = 0; i < 5; i++) {
                         if (i == 0) {
@@ -1188,7 +1188,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 prev = ins; // update previous instruction
 
             }
-            cerr << "hereee" << endl;
+            //cerr << "hereee" << endl;
             cerr.flush();  
             if (KnobVerbose) {
                 cerr << "rtn name: " << RTN_Name(rtn) << endl;
@@ -1197,7 +1197,7 @@ int find_candidate_rtns_for_translation(IMG img)
             RTN_Close(rtn);
 
             chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
-            cerr << "heree1" << endl;
+            //cerr << "heree1" << endl;
             cerr.flush();  
         }
     }
