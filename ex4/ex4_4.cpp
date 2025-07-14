@@ -842,7 +842,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                         !INS_IsCall(ins);
                 cerr << "done Calc isTerminate" << endl;
                 cerr.flush();  
-                /*
+                
                 if (INS_IsIndirectControlFlow(ins)) {
                     
                     cerr << "isTerminate" << endl;
@@ -1097,10 +1097,8 @@ int find_candidate_rtns_for_translation(IMG img)
                     
                 }
                 cerr << "Calc is prev Terminate" << endl;
-                */
                 
                 
-                /*
                 if (isPrevInsTerminates) {
                     cerr << "not here 10" << endl;
                     cerr.flush();  
@@ -1183,7 +1181,6 @@ int find_candidate_rtns_for_translation(IMG img)
                     //cerr.flush();  
 
                 }
-                */
                   
                 isPrevInsTerminates =  isInsTerminateBBL;
                 cerr.flush();  
@@ -1371,12 +1368,12 @@ VOID Fini(INT32 code, VOID* v)
             a.count = bb_map_mem[i];
             a.fall  = bb_map_fall_count[i];
             a.taken = a.count - a.fall;
-            cerr << "BBLprof  "
-            << "addr=0x" << std::hex << a.addr << std::dec
-            << "  count=" << a.count
-            << "  fall="  << a.fall
-            << "  taken=" << a.taken
-            << endl;
+            //cerr << "BBLprof  "
+            //<< "addr=0x" << std::hex << a.addr << std::dec
+            //<< "  count=" << a.count
+            //<< "  fall="  << a.fall
+            //<< "  taken=" << a.taken
+            //<< endl;
             // Collect indirect jump targets
             for (size_t j = 0; j < MAX_TARG; ++j) {
                 if (bb_map_targ_count[i][j] > 0) {
@@ -1421,10 +1418,11 @@ VOID Fini(INT32 code, VOID* v)
 
         
         for (const auto& jump : bbl.indirect_jumps) {
-            outfile << ", 0x" << std::hex << jump.addr
-            << ", " << std::dec << jump.count;
-        outfile << endl;
+            outfile << ", 0x" << hex << jump.addr
+            << ", " << dec << jump.count;
+            
         }
+        outfile << "\n";
     }
 
     outfile.close();
