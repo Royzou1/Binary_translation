@@ -1376,12 +1376,11 @@ VOID Fini(INT32 code, VOID* v)
             //<< endl;
             // Collect indirect jump targets
             for (size_t j = 0; j < MAX_TARG; ++j) {
-                if (bb_map_targ_count[i][j] > 0) {
-                    indirectJumps b;
-                    b.addr  = bb_map_targ_addr[i][j];
-                    b.count = bb_map_targ_count[i][j];
-                    a.indirect_jumps.push_back(b);
-                }
+                indirectJumps b;
+                b.addr  = bb_map_targ_addr[i][j];
+                b.count = bb_map_targ_count[i][j];
+                a.indirect_jumps.push_back(b);
+                
             }
 
             // Sort indirect jumps by count (high → low)
