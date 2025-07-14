@@ -773,6 +773,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 if (isInsStartsBBL) {
                     cerr << "Start BBL" << endl;
                     bbl_num++;
+                    cerr << "BBL is: " << bbl_num << endl;
                     
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
@@ -1370,7 +1371,12 @@ VOID Fini(INT32 code, VOID* v)
             a.count = bb_map_mem[i];
             a.fall  = bb_map_fall_count[i];
             a.taken = a.count - a.fall;
-
+            cerr << "BBLprof  "
+            << "addr=0x" << std::hex << a.addr << std::dec
+            << "  count=" << a.count
+            << "  fall="  << a.fall
+            << "  taken=" << a.taken
+            << endl;
             // Collect indirect jump targets
             for (size_t j = 0; j < MAX_TARG; ++j) {
                 if (bb_map_targ_count[i][j] > 0) {
