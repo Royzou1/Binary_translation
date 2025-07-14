@@ -945,7 +945,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                         else if (i == 9) {
                             // 9: RCX ← &bb_map_targ_addr[bbl_num][0]
-                            xed_inst2(&enc_instr, *dstate,
+                            xed_inst2(&enc_instr, dstate,
                                 XED_ICLASS_MOV, 64,
                                 xed_reg(XED_REG_RCX),
                                 xed_imm0((UINT64)&bb_map_targ_addr[bbl_num][0], 64));
@@ -956,7 +956,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                     XED_ICLASS_LEA, 64,
                                     xed_reg(XED_REG_RCX),
                                     xed_mem_bisd(XED_REG_RCX, XED_REG_RBX, 8,
-                                                xed_disp(0, 64), 64));
+                                                xed_disp(0, 0), 64));
                         }
                         else if (i == 11) {
                             // 11: [RCX] ← RAX
@@ -968,7 +968,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                         else if (i == 12) {
                             // 12: RCX ← &bb_map_targ_count[bbl_num][0]
-                            xed_inst2(&enc_instr, *dstate,
+                            xed_inst2(&enc_instr, dstate,
                                 XED_ICLASS_MOV, 64,
                                 xed_reg(XED_REG_RCX),
                                 xed_imm0((UINT64)&bb_map_targ_count[bbl_num][0], 64));
@@ -979,7 +979,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                     XED_ICLASS_LEA, 64,
                                     xed_reg(XED_REG_RCX),
                                     xed_mem_bisd(XED_REG_RCX, XED_REG_RBX, 8,
-                                                xed_disp(0, 64), 64));
+                                                xed_disp(0, 0), 64));
                         }
                         else if (i == 14) {
                             // 14: RAX ← [RCX]
