@@ -20,6 +20,8 @@ extern "C" {
 #include <map>
 #include <vector>
 #include <algorithm>
+using namespace std;
+
 
 #define MAX_BBL_NUM 10000
 #define MAX_TARG 4 //up to 4 targets for each indirect jumps for each basic block
@@ -36,7 +38,7 @@ static unsigned bbl_num = 0;
 struct indirectJumps {
     ADDRINT addr;
     uint64_t count;
-}
+};
 
 struct BBLprof {
     ADDRINT addr;
@@ -44,9 +46,8 @@ struct BBLprof {
     uint64_t taken;
     uint64_t fall;
     vector<indirectJumps> indirect_jumps;
-}
+};
 
-using namespace std;
 
 std::ofstream outfile;
 
