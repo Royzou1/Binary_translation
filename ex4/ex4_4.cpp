@@ -841,7 +841,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 //cerr.flush();  
                 
                 if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { 
-                    //cerr << "isTerminate" << endl;
+                    cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -850,7 +850,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem, rbx_mem, rcx_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-                    //cerr << "not here 3" << endl;
+                    cerr << "not here 3" << endl;
                     // Retrieve the details about the indirect jmp operands of ‘INS ins’:
                     xed_decoded_inst_t *xedd = INS_XedDec(ins);
                     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
@@ -1095,7 +1095,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
                 //cerr << "Calc is prev Terminate" << endl;
                 
-                
+                /*
                 if (isPrevInsTerminates) {
                     //cerr << "not here 10" << endl;
                     cerr.flush();  
@@ -1179,6 +1179,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 }
                   
+                */
                 isPrevInsTerminates =  isInsTerminateBBL;
                 cerr.flush();  
 
