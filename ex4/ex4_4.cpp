@@ -828,7 +828,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 cerr << "done Calc isTerminate" << endl;
                 cerr.flush();  
                 
-                if (isInsTerminateBBL) {
+                if (INS_IsIndirectControlFlow(ins)) {
                     cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
