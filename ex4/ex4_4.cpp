@@ -33,6 +33,19 @@ static uint64_t bb_map_mem[MAX_BBL_NUM] = {0};
 static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
 static unsigned bbl_num = 0;
 
+struct indirectJumps {
+    ADDRINT addr;
+    uint64_t count;
+}
+
+struct BBLprof {
+    ADDRINT addr;
+    uint64_t count;
+    uint64_t taken;
+    uint64_t fall;
+    vector<indirectJumps> indirect_jumps;
+}
+
 using namespace std;
 
 std::ofstream outfile;
@@ -1340,47 +1353,69 @@ bool cmp(const std::pair<ADDRINT, UINT64>& a, const std::pair<ADDRINT, UINT64>& 
 
 VOID Fini(INT32 code, VOID* v)
 {
-
     outfile.open("bb-profile.csv");
 
-    // Vector to store pairs of address and count
-    std::vector<std::pair<ADDRINT, uint64_t>> sorted_bbls;
+    // Vector to store tuples of bbl address and pointer to profile
+    vector<BBLprof> non_zero_bbls;
 
-    for (unsigned i = 0; i < bbl_num; ++i) {
-        if (bb_map_mem[i] > 0) {  // <-- Only include non-zero execution counts
-            sorted_bbls.emplace_back(bb_addr_mem[i], bb_map_mem[i]);
+    // Collect all non-zero execution bbls
+    for (unsigned i = 0; i <= bbl_num; ++i) {
+        if (bb_map_mem[i] > 0) {
+            BBLprof a;
+            a.addr  = bb_addr_mem[i];
+            a.count = bb_map_mem[i];
+            a.fall  = bb_map_fall_count[i];
+            a.taken = a.count - a.fall;
+
+            // Collect indirect jump targets
+            for (size_t j = 0; j < MAX_TARG; ++j) {
+                if (bb_map_targ_count[i][j] > 0) {
+                    indirectJumps b;
+                    b.addr  = bb_map_targ_addr[i][j];
+                    b.count = bb_map_targ_count[i][j];
+                    a.indirect_jumps.push_back(b);
+                }
+            }
+
+            // Sort indirect jumps by count (high → low)
+            std::sort(a.indirect_jumps.begin(), a.indirect_jumps.end(),
+                [](const indirectJumps& x, const indirectJumps& y) {
+                    return x.count > y.count;
+                });
+
+            // Add to final list
+            non_zero_bbls.push_back(a);
         }
-    }
+    }   
 
-    // Sort in descending order (most executed first)
-    std::sort(sorted_bbls.begin(), sorted_bbls.end(),
-        [](const std::pair<ADDRINT, uint64_t>& a, const std::pair<ADDRINT, uint64_t>& b) {
-            return a.second > b.second;
+    // Sort all BBLs by total count (high → low)
+    std::sort(non_zero_bbls.begin(), non_zero_bbls.end(),
+        [](const BBLprof& x, const BBLprof& y) {
+            return x.count > y.count;
         });
+        
+    // Print header (optional)
+    outfile << "BBL Address, Exec Count, Taken Count, Fallthrough Count";
+    for (int i = 0; i < MAX_TARG; ++i) {
+        outfile << ", Target Addr " << (i + 1) << ", Target Exec Count " << (i + 1);
+    }
+    outfile << endl;
 
-    // Write results as: <address>, <exec count>
-    for (const auto& entry : sorted_bbls) {
-        outfile << std::hex << entry.first << ", " << std::dec << entry.second << endl;
+    // Emit the sorted results
+    for (const auto& bbl : non_zero_bbls) {
+        outfile << std::hex << bbl->addr << std::dec
+                << ", " << bbl->count
+                << ", " << bbl->taken
+                << ", " << bbl->fall;
+
+        
+        for (const auto& jump : bbl->indirect_jumps) {
+            outfile << ", 0x" << std::hex << jump.addr
+            << ", " << std::dec << jump.count;
+        outfile << endl;
     }
 
     outfile.close();
-
-/*
-    std::vector<std::pair<ADDRINT, UINT64>> sorted_bbls(bbl_counts.begin(), bbl_counts.end());
-
-    // Sort blocks by frequency (descending)
-    std::sort(sorted_bbls.begin(), sorted_bbls.end(), cmp);
-
-    // Write to CSV file
-    outfile.open("bb-profile.csv");
-    for (auto& entry : sorted_bbls) {
-        outfile << std::hex << entry.first << ", " << std::dec << entry.second << std::endl;
-    }
-
-    outfile.close();
-    
-    //cerr << "Reached _exit." << endl;
-    */
 }
 
 VOID ExitInProbeMode(INT code)
