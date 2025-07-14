@@ -782,7 +782,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-                    cerr << "Start BBL before loop" << endl;
+                    //cerr << "Start BBL before loop" << endl;
                     for (int i = 0; i < 5; i++) {
                         if (i == 0)
                             xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
@@ -833,17 +833,18 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     cerr << "Start BBL exit" << endl;
                 }
-                cerr << "Calc isTerminate" << endl;
+                //cerr << "Calc isTerminate" << endl;
                 cerr.flush();  
                 bool isInsTerminateBBL =   (INS_IsIndirectControlFlow(ins) || 
                                         INS_IsDirectControlFlow(ins) || 
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
-                cerr << "done Calc isTerminate" << endl;
+                //cerr << "done Calc isTerminate" << endl;
                 cerr.flush();  
                 
                 if (INS_IsIndirectControlFlow(ins)) {
-                    cerr << "isTerminate" << endl;
+                    continue;
+                    //cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
                     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
@@ -852,7 +853,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     static uint64_t rax_mem, rbx_mem, rcx_mem;
 
                     bb_addr_mem[bbl_num] = INS_Address(ins);
-                    cerr << "not here 3" << endl;
+                    //cerr << "not here 3" << endl;
                     // Retrieve the details about the indirect jmp operands of ‘INS ins’:
                     xed_decoded_inst_t *xedd = INS_XedDec(ins);
                     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
@@ -864,7 +865,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd,0);
                     xed_reg_enum_t targ_reg = XED_REG_INVALID;
                     unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
-                    cerr << "not here 4" << endl;
+                    //cerr << "not here 4" << endl;
                     if (!memops)
                     targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
                     // Debug print.
@@ -879,7 +880,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     << "\n";
                     cerr << "not here 4 " << endl;
                     for (int i = 0; i < 22; ++i) {
-                        cerr << "encoding " << i << endl;
+                        //cerr << "encoding " << i << endl;
                         cerr.flush();
 
                         if (i == 0) {
@@ -930,15 +931,15 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                         else if (i == 6) {
                             // 6: compute jump target → RAX
-                            cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) << endl;
+                            //cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) << endl;
                             if (targ_reg != XED_REG_INVALID) {
-                                cerr << "if branch" << endl;
+                                //cerr << "if branch" << endl;
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
                                         xed_reg(XED_REG_RAX),
                                         xed_reg(targ_reg));
                             } else {
-                                cerr << "else branch" << endl;
+                                //cerr << "else branch" << endl;
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
                                         xed_reg(XED_REG_RAX),
@@ -1088,18 +1089,19 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
 
-                        cerr << "encoded " << i << endl;
-                        cerr.flush();
+                        //cerr << "encoded " << i << endl;
+                        //cerr.flush();
                     }
 
                     
                 }
                 
-                cerr << "Calc is prev Terminate" << endl;
+                //cerr << "Calc is prev Terminate" << endl;
 
                 if (isPrevInsTerminates) {
-                    cerr << "not here 10" << endl;
-                    cerr.flush();  
+                    continue;
+                    //cerr << "not here 10" << endl;
+                    //cerr.flush();  
                     
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
@@ -1175,8 +1177,8 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
                     }
-                    cerr << "not here 12" << endl;
-                    cerr.flush();  
+                    //cerr << "not here 12" << endl;
+                    //cerr.flush();  
 
                 }
                 
@@ -1187,7 +1189,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 prev = ins; // update previous instruction
 
             }
-            cerr << "hereee" << endl;
+            //cerr << "hereee" << endl;
             cerr.flush();  
             if (KnobVerbose) {
                 cerr << "rtn name: " << RTN_Name(rtn) << endl;
@@ -1196,8 +1198,8 @@ int find_candidate_rtns_for_translation(IMG img)
             RTN_Close(rtn);
 
             chain_all_direct_br_and_call_target_entries(rtn_entry, num_of_instr_map_entries);
-            cerr << "heree1" << endl;
-            cerr.flush();  
+            //cerr << "heree1" << endl;
+            //cerr.flush();  
         }
     }
 
@@ -1387,6 +1389,7 @@ VOID Fini(INT32 code, VOID* v)
             // Add to final list
             non_zero_bbls.push_back(a);
         }
+        
     }   
 
     // Sort all BBLs by total count (high → low)
@@ -1418,6 +1421,7 @@ VOID Fini(INT32 code, VOID* v)
     }
 
     outfile.close();
+    cerr << "num of BBL " << bbl_num << endl;
 }
 
 VOID ExitInProbeMode(INT code)
