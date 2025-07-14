@@ -1404,13 +1404,13 @@ VOID Fini(INT32 code, VOID* v)
 
     // Emit the sorted results
     for (const auto& bbl : non_zero_bbls) {
-        outfile << std::hex << bbl->addr << std::dec
-                << ", " << bbl->count
-                << ", " << bbl->taken
-                << ", " << bbl->fall;
+        outfile << std::hex << bbl.addr << std::dec
+                << ", " << bbl.count
+                << ", " << bbl.taken
+                << ", " << bbl.fall;
 
         
-        for (const auto& jump : bbl->indirect_jumps) {
+        for (const auto& jump : bbl.indirect_jumps) {
             outfile << ", 0x" << std::hex << jump.addr
             << ", " << std::dec << jump.count;
         outfile << endl;
