@@ -1380,7 +1380,8 @@ VOID Fini(INT32 code, VOID* v)
                 b.addr  = bb_map_targ_addr[i][j];
                 b.count = bb_map_targ_count[i][j];
                 a.indirect_jumps.push_back(b);
-                
+                if (bb_map_targ_addr[i][j] != 0)
+                    cerr << "Addr is not zero" << endl;
             }
 
             // Sort indirect jumps by count (high → low)
