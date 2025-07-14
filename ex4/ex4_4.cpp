@@ -963,7 +963,7 @@ int find_candidate_rtns_for_translation(IMG img)
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_mem_bd(XED_REG_RCX,
-                                                xed_disp(0, 64), 64),
+                                                xed_disp(0, 0), 64),
                                     xed_reg(XED_REG_RAX));
                         }
                         else if (i == 12) {
@@ -987,7 +987,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                     XED_ICLASS_MOV, 64,
                                     xed_reg(XED_REG_RAX),
                                     xed_mem_bd(XED_REG_RCX,
-                                                xed_disp(0, 64), 64));
+                                                xed_disp(0, 0), 64));
                         }
                         else if (i == 15) {
                             // 15: RAX ← RAX + 1
@@ -1001,7 +1001,7 @@ int find_candidate_rtns_for_translation(IMG img)
                             xed_inst2(&enc_instr, dstate,
                                     XED_ICLASS_MOV, 64,
                                     xed_mem_bd(XED_REG_RCX,
-                                                xed_disp(0, 64), 64),
+                                                xed_disp(0, 0), 64),
                                     xed_reg(XED_REG_RAX));
                         }
                         else if (i == 17) {
