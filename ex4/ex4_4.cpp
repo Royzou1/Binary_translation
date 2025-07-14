@@ -916,12 +916,15 @@ int find_candidate_rtns_for_translation(IMG img)
                         }
                         else if (i == 6) {
                             // 6: compute jump target → RAX
+                            cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) << endl;
                             if (targ_reg != XED_REG_INVALID) {
+                                cerr << "if branch" << endl;
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
                                         xed_reg(XED_REG_RAX),
                                         xed_reg(targ_reg));
                             } else {
+                                cerr << "else branch" << endl;
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
                                         xed_reg(XED_REG_RAX),
