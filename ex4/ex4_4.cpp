@@ -841,10 +841,9 @@ int find_candidate_rtns_for_translation(IMG img)
                                         INS_IsRet(ins)) && 
                                         !INS_IsCall(ins);
                 //cerr << "done Calc isTerminate" << endl;
-                cerr.flush();  
+                //cerr.flush();  
                 
-                if (INS_IsIndirectControlFlow(ins)) {
-                    
+                if (INS_IsIndirectControlFlow(ins)) { 
                     //cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
@@ -871,7 +870,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
                     // Debug print.
                     //dump_instr_from_xedd (xedd, bb_addr_mem[bbl_num]);
-                    cerr << "BBL addr: " << bb_addr_mem[bbl_num] << endl;
+                    cerr << "BBL addr: " << hex << bb_addr_mem[bbl_num] << dec << endl;
                     cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
                     << " index reg " << xed_reg_enum_t2str(index_reg)
                     << " scale: " << scale
@@ -1427,7 +1426,7 @@ VOID Fini(INT32 code, VOID* v)
     }
 
     outfile.close();
-    cerr << "num of BBL " << bbl_num << endl;
+    cerr << "num of BBL: " << dec << bbl_num << endl;
 }
 
 VOID ExitInProbeMode(INT code)
