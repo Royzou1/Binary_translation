@@ -1353,8 +1353,8 @@ bool cmp(const std::pair<ADDRINT, UINT64>& a, const std::pair<ADDRINT, UINT64>& 
 
 VOID Fini(INT32 code, VOID* v)
 {
-    cerr << "bb_map_targ_addr is: 0x" << hex << &bb_map_targ_addr[0][0]
-    cerr << "bb_map_targ_count is: 0x" << hex << &bb_map_targ_count[0][0]
+    cerr << "bb_map_targ_addr is: 0x" << hex << &bb_map_targ_addr[0][0] << endl;
+    cerr << "bb_map_targ_count is: 0x" << hex << &bb_map_targ_count[0][0] << endl;
     outfile.open("bb-profile.csv");
 
     // Vector to store tuples of bbl address and pointer to profile
