@@ -1206,8 +1206,8 @@ int find_candidate_rtns_for_translation(IMG img)
             cerr.flush();  
         }
     }
-    cerr << "tc ptr is: " << hex << tc << " And its size is: " << dec <tc_cursor << endl;
-    cerr << "AKA the end of the tc should be: " << hex << int(tc) + tc_cursor << endl;
+    cerr << "tc ptr is: " << hex << tc << " And its size is: " << dec << tc_cursor << endl;
+    cerr << "AKA the end of the tc should be: " << hex << uint64_t(tc) + tc_cursor << endl;
 
     return 0;
 }
