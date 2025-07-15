@@ -1206,8 +1206,6 @@ int find_candidate_rtns_for_translation(IMG img)
             cerr.flush();  
         }
     }
-    cerr << "tc ptr is: " << hex << tc << " And its size is: " << dec << tc_cursor << endl;
-    cerr << "AKA the end of the tc should be: " << hex << uint64_t(tc) + tc_cursor << endl;
 
     return 0;
 }
@@ -1518,6 +1516,14 @@ VOID ImageLoad(IMG img, VOID *v)
     cerr.flush();
     cerr << "Done with img load" << endl;
     cerr.flush();
+
+    cerr << "tc ptr is: 0x"
+     << std::hex << reinterpret_cast<uintptr_t>(tc)   // pointer → integer
+     << std::dec << " and its size is: " << tc_cursor << '\n';
+
+    cerr << "end of tc should be: 0x"
+     << std::hex << (reinterpret_cast<uintptr_t>(tc) + tc_cursor)
+     << std::dec << '\n';
 }
 
 
