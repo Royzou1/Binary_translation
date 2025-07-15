@@ -1016,6 +1016,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     
                 }
                 
+
                 //inserting the cmd
                 bool isRtnHead = (RTN_Address(rtn) == addr);
                 rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
@@ -1094,7 +1095,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 //cerr << "Calc isTerminate" << endl;
 
                 
-                //after printing the jump
+                /*
                 if (isInsTerminateBBL) {
                     //cerr << "not here 10" << endl;
                     cerr.flush();  
@@ -1177,8 +1178,8 @@ int find_candidate_rtns_for_translation(IMG img)
                     //cerr.flush();  
 
                 }
-                  
                 
+                */
                 
                 cerr.flush();  
 
