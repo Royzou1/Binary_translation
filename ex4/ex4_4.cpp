@@ -758,14 +758,17 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
                     return -1;
                 }
-               
+                cerr << "Err here" << endl;
+                cerr.flush();
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 bool isEndBBL = !INS_Valid(ins) || INS_IsControlFlow(ins);
                 INS next = INS_Next(ins);
+                cerr << "Err here1" << endl;
+                cerr.flush();
                 
                 
-                
-
+                cerr << "Err 2" << endl;
+                cerr.flush();
                 //inserting the cmd
                 bool isRtnHead = (RTN_Address(rtn) == addr);
                 rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
@@ -773,7 +776,9 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "ERROR: failed during instruction translation." << endl;
                     return -1;
                 }
-
+                cerr << "Err here3" << endl;
+                cerr.flush();
+                
                 if (isInsStartsBBL) {
                     //cerr << "Start BBL" << endl;
                     bbl_num++;
@@ -838,8 +843,9 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     //cerr << "Start BBL exit" << endl;
                 }
-                //cerr << "Calc isTerminate" << endl;
-
+                
+                cerr << "Err here4" << endl;
+                cerr.flush();
                 //Indirect jumps
                 if (INS_Valid(next) && INS_IsIndirectControlFlow(next) && !INS_IsRet(next) && !INS_IsCall(next)) { 
                     
@@ -1094,7 +1100,9 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     
                 }
-            
+                
+                cerr << "Err here5" << endl;
+                cerr.flush();
                 
                 if (isEndBBL) {
                     //cerr << "not here 10" << endl;
@@ -1179,6 +1187,8 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 }
                 
+                cerr << "Err here6" << endl;
+                cerr.flush();
                 prev = ins; // update previous instruction
 
             }
