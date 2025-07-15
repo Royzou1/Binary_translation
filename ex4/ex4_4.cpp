@@ -761,7 +761,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 cerr << "Err here" << endl;
                 cerr.flush();
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
-                bool isEndBBL = !INS_Valid(ins) || INS_IsControlFlow(ins);
+                //bool isEndBBL = !INS_Valid(ins) || INS_IsControlFlow(ins);
                 INS next = INS_Next(ins);
                 cerr << "Err here1" << endl;
                 cerr.flush();
