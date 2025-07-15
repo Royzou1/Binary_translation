@@ -763,6 +763,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 
                 //before printing the jump updates counters
                 if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { 
+                    /*
                     cerr << "isTerminate" << endl;
                     xed_encoder_instruction_t enc_instr;
                     xed_encoder_request_t enc_req;
@@ -1012,7 +1013,7 @@ int find_candidate_rtns_for_translation(IMG img)
                         //cerr << "encoded " << i << endl;
                         //cerr.flush();
                     }
-
+                    */
                     
                 }
                 
