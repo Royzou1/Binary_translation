@@ -886,7 +886,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     << "\n";
                     cerr << "not here 4 " << endl;
                     for (int i = 0; i < 22; ++i) {
-                        //cerr << "encoding " << i << endl;
+                        cerr << "encoding " << i << endl;
                         cerr.flush();
 
                         if (i == 0) {
@@ -1095,8 +1095,8 @@ int find_candidate_rtns_for_translation(IMG img)
                             return -1;
                         }
 
-                        //cerr << "encoded " << i << endl;
-                        //cerr.flush();
+                        cerr << "encoded " << i << endl;
+                        cerr.flush();
                     }
                     
                 }
