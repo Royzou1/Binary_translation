@@ -857,10 +857,10 @@ int find_candidate_rtns_for_translation(IMG img)
                     unsigned int olen = 0;
                     static uint64_t rax_mem, rbx_mem, rcx_mem;
 
-                    bb_addr_mem[bbl_num] = INS_Address(ins);
+                    bb_addr_mem[bbl_num] = INS_Address(next);
                     cerr << "not here 3" << endl;
                     // Retrieve the details about the indirect jmp operands of ‘INS ins’:
-                    xed_decoded_inst_t *xedd = INS_XedDec(ins);
+                    xed_decoded_inst_t *xedd = INS_XedDec(next);
                     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
                     xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
                     xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
@@ -945,7 +945,7 @@ int find_candidate_rtns_for_translation(IMG img)
                                         xed_reg(XED_REG_RAX),
                                         xed_reg(targ_reg));
                             } else {
-                                cerr << "else branch" << endl;
+                                //cerr << "else branch" << endl;
                                 xed_inst2(&enc_instr, dstate,
                                         XED_ICLASS_MOV, 64,
                                         xed_reg(XED_REG_RAX),
