@@ -760,8 +760,9 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
 
                 bool isInsTerminateBBL = INS_IsControlFlow(ins);
+                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 
-                //before printing the jump updates counters
+                //Indirect jumps
                 if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { 
                     
                     cerr << "isTerminate" << endl;
@@ -1016,87 +1017,8 @@ int find_candidate_rtns_for_translation(IMG img)
                     
                 }
                 
-
-                //inserting the cmd
-                bool isRtnHead = (RTN_Address(rtn) == addr);
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
-                if (rc < 0) {
-                    cerr << "ERROR: failed during instruction translation." << endl;
-                    return -1;
-                }
-                
-                //detect start of a basic block
-                bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
-
-                if (isInsStartsBBL) {
-                    //cerr << "Start BBL" << endl;
-                    bbl_num++;
-                    //cerr << "BBL is: " << bbl_num << endl;
-                    
-                    xed_encoder_instruction_t enc_instr;
-                    xed_encoder_request_t enc_req;
-                    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
-                    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
-                    unsigned int olen = 0;
-                    static uint64_t rax_mem;
-
-                    bb_addr_mem[bbl_num] = INS_Address(ins);
-                    //cerr << "Start BBL before loop" << endl;
-                    for (int i = 0; i < 5; i++) {
-                        if (i == 0)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-                                      xed_reg(XED_REG_RAX));
-                        else if (i == 1)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
-                        else if (i == 2)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-                        else if (i == 3)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
-                                      xed_reg(XED_REG_RAX));
-                        else if (i == 4)
-                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                                      xed_reg(XED_REG_RAX),
-                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-
-                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-                        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-                            cerr << "conversion to encode request failed\n";
-                            return -1;
-                        }
-
-                        xed_error_enum_t xed_error = xed_encode(&enc_req,
-                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
-                        if (xed_error != XED_ERROR_NONE) {
-                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-                            return -1;
-                        }
-
-                        xed_decoded_inst_t xedd_instr;
-                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
-                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
-                            cerr << "xed decode failed at: 0x" << hex << addr << endl;
-                            return -1;
-                        }
-
-                        rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
-                        if (rc < 0) {
-                            cerr << "instruction translation failed\n";
-                            return -1;
-                        }
-                    }
-                    //cerr << "Start BBL exit" << endl;
-                }
-                //cerr << "Calc isTerminate" << endl;
-
-                
-                /*
-                if (isInsTerminateBBL) {
+                //Pre 
+                if (isInsStartsBBL && INS_Valid(prev)) {
                     //cerr << "not here 10" << endl;
                     cerr.flush();  
                     
@@ -1179,10 +1101,83 @@ int find_candidate_rtns_for_translation(IMG img)
 
                 }
                 
-                */
-                
-                cerr.flush();  
 
+                //inserting the cmd
+                bool isRtnHead = (RTN_Address(rtn) == addr);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
+                if (rc < 0) {
+                    cerr << "ERROR: failed during instruction translation." << endl;
+                    return -1;
+                }
+
+                if (isInsStartsBBL) {
+                    //cerr << "Start BBL" << endl;
+                    bbl_num++;
+                    //cerr << "BBL is: " << bbl_num << endl;
+                    
+                    xed_encoder_instruction_t enc_instr;
+                    xed_encoder_request_t enc_req;
+                    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+                    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+                    unsigned int olen = 0;
+                    static uint64_t rax_mem;
+
+                    bb_addr_mem[bbl_num] = INS_Address(ins);
+                    //cerr << "Start BBL before loop" << endl;
+                    for (int i = 0; i < 5; i++) {
+                        if (i == 0)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 1)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64));
+                        else if (i == 2)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+                        else if (i == 3)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_num], 64), 64),
+                                      xed_reg(XED_REG_RAX));
+                        else if (i == 4)
+                            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                                      xed_reg(XED_REG_RAX),
+                                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+
+                        xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+                        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
+                            cerr << "conversion to encode request failed\n";
+                            return -1;
+                        }
+
+                        xed_error_enum_t xed_error = xed_encode(&enc_req,
+                                    reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+                        if (xed_error != XED_ERROR_NONE) {
+                            cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+                            return -1;
+                        }
+
+                        xed_decoded_inst_t xedd_instr;
+                        xed_decoded_inst_zero_set_mode(&xedd_instr, &dstate);
+                        if (xed_decode(&xedd_instr, reinterpret_cast<UINT8*>(encoded_ins), max_inst_len) != XED_ERROR_NONE) {
+                            cerr << "xed decode failed at: 0x" << hex << addr << endl;
+                            return -1;
+                        }
+
+                        rc = add_new_instr_entry(&xedd_instr, 0x0, olen, false);
+                        if (rc < 0) {
+                            cerr << "instruction translation failed\n";
+                            return -1;
+                        }
+                    }
+                    //cerr << "Start BBL exit" << endl;
+                }
+                //cerr << "Calc isTerminate" << endl;
+
+            
+                
                 prev = ins; // update previous instruction
 
             }
