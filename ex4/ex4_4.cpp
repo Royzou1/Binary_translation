@@ -1103,7 +1103,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 
                 cerr << "Err here5" << endl;
                 cerr.flush();
-                
+                /*
                 if (isEndBBL) {
                     //cerr << "not here 10" << endl;
                     cerr.flush();  
@@ -1186,7 +1186,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     //cerr.flush();  
 
                 }
-                
+                */
                 cerr << "Err here6" << endl;
                 cerr.flush();
                 prev = ins; // update previous instruction
