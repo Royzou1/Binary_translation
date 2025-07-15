@@ -1331,7 +1331,7 @@ int allocate_and_init_memory(IMG img)
 
     ADDRINT text_size = (highest_sec_addr - lowest_sec_addr) * 2 + pagesize * 4;
 
-    unsigned tclen = 10 * text_size + pagesize * 4;   // need a better estimate???
+    unsigned tclen = 20 * text_size + pagesize * 4;   // need a better estimate???
 
     // Allocate the needed tc with RW+EXEC permissions and is not located in an address that is more than 32bits afar:
     char * addr = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
