@@ -758,8 +758,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
                     return -1;
                 }
-
-                bool isInsTerminateBBL = INS_IsControlFlow(ins);
+               
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 
                 //Indirect jumps
