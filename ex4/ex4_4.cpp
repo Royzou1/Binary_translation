@@ -760,7 +760,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
                
                 bool isInsStartsBBL = !INS_Valid(prev) || INS_IsControlFlow(prev);
-                
+                /*
                 //Indirect jumps
                 if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { 
                     
@@ -1015,7 +1015,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     
                 }
-                
+                */
                 //Pre 
                 if (isInsStartsBBL && INS_Valid(prev)) {
                     //cerr << "not here 10" << endl;
