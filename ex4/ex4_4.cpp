@@ -1501,6 +1501,9 @@ VOID ImageLoad(IMG img, VOID *v)
       commit_translated_routines();
       cerr << "after commit of translated routines" << endl;
     }
+    cerr.flush();
+    cerr << "Done with img load" << endl;
+    cerr.flush();
 }
 
 
