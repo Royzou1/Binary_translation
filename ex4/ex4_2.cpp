@@ -1382,7 +1382,7 @@ VOID Fini(INT32 code, VOID* v)
 
         if (bbl->is_indirect_jmp) {
             // sort the indices 0-(MAX_TARG-1) by descending exec-count
-            int idx[MAX_TARG] = [0,1,2,3];
+            array<int, MAX_TARG> idx = {0, 1, 2, 3};
 
             sort(idx.begin(), idx.end(),
                 [&](int a, int b) {
