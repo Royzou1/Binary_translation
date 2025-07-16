@@ -983,7 +983,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
             case 9: // RCX = &target_address[0]
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RCX),
-                          xed_imm0((ADDRINT)&(bbl_mem_map[bbl_idx].target_address[0]), 64));
+                          xed_imm0((ADDRINT)&(bb_map_mem[bbl_idx].target_address[0]), 64));
                 break;
 
             case 10: //&target_address[offset] = address
@@ -995,7 +995,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
             case 11: // RBX = &address_counter
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RBX),
-                          xed_imm0((ADDRINT)&(bbl_mem_map[bbl_idx].targ_exec_count[0]), 64));
+                          xed_imm0((ADDRINT)&(bb_map_mem[bbl_idx].targ_exec_count[0]), 64));
                 break;
 
             case 12: // RCX = &address countr(offset)
