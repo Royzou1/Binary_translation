@@ -915,13 +915,13 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
         //xed_inst2(&enc_instr, *dstate, XED_ICLASS_NOP, 64); // Default NOP, will be overwritten
 
         switch (i) {
-            case 0:
+            case 0: //store RAX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 1:
+            case 1: //store RBX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RAX),
                           xed_reg(XED_REG_RBX));
@@ -933,7 +933,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 3:
+            case 3: //Store RCX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RAX),
                           xed_reg(XED_REG_RCX));
@@ -945,7 +945,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 5:
+            case 5: //Recover RAX if neccery
                 if (targ_reg == XED_REG_RAX || base_reg == XED_REG_RAX || index_reg == XED_REG_RAX) {
                     xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                               xed_reg(XED_REG_RAX),
@@ -953,7 +953,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                 }
                 break;
 
-            case 6:
+            case 6: // RAX = target address
                 if (base_reg == XED_REG_RIP) {
                     unsigned int orig_size = xed_decoded_inst_get_length(xedd);
                     xed_int64_t new_disp = ins_addr + disp + orig_size;
@@ -968,55 +968,55 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                 }
                 break;
 
-            case 7:
+            case 7: // RBX = RAX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RBX),
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 8:
+            case 8: // RAX = Entry
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_AND, 64,
                           xed_reg(XED_REG_RAX),
                           xed_imm0(MAX_TARG_ADDRS, 8));
                 break;
 
-            case 9:
+            case 9: // RCX = &target_address[0]
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RCX),
-                          xed_imm0((ADDRINT)&bb_map_targ_addr[bbl_idx][0], 64));
+                          xed_imm0((ADDRINT)&(bbl_mem_map[bbl_idx].target_address[0]), 64));
                 break;
 
-            case 10:
+            case 10: //&target_address[offset] = address
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
                           xed_reg(XED_REG_RBX));
                 break;
 
-            case 11:
+            case 11: // RBX = &address_counter
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RBX),
-                          xed_imm0((ADDRINT)&bb_map_targ_count[bbl_idx][0], 64));
+                          xed_imm0((ADDRINT)&(bbl_mem_map[bbl_idx].targ_exec_count[0]), 64));
                 break;
 
-            case 12:
+            case 12: // RCX = &address countr(offset)
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RCX),
                           xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64));
                 break;
 
-            case 13:
+            case 13: // RCX ++
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
                           xed_reg(XED_REG_RCX),
                           xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
                 break;
 
-            case 14:
+            case 14: // &address countr(offset) = RCX 
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
                           xed_reg(XED_REG_RCX));
                 break;
 
-            case 15:
+            case 15: //recover RCX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RAX),
                           xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64));
@@ -1028,7 +1028,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 17:
+            case 17: // Recover RBX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RAX),
                           xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
@@ -1040,29 +1040,30 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
                           xed_reg(XED_REG_RAX));
                 break;
 
-            case 19:
-                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
-                          xed_reg(XED_REG_RAX),
-                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64));
-                break;
+            // case 19:
+            //     xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+            //               xed_reg(XED_REG_RAX),
+            //               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64));
+            //     break;
 
-            case 20:
-                xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
-                          xed_reg(XED_REG_RAX),
-                          xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-                break;
+            // case 20:
+            //     xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
+            //               xed_reg(XED_REG_RAX),
+            //               xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+            //     break;
 
-            case 21:
-                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
-                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64),
-                          xed_reg(XED_REG_RAX));
-                break;
-
-            case 22:
+            // case 21:
+            //     xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+            //               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64),
+            //               xed_reg(XED_REG_RAX));
+            //     break;
+            
+            case 22: //recover RAX
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RAX),
                           xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
                 break;
+            
         }
 
         // Encode -> Decode -> Insert
@@ -1379,13 +1380,13 @@ VOID Fini(INT32 code, VOID* v)
                 << ", " << computed_taken
                 << ", " << bbl->fallthrough_num;
 
-       if (bbl->is_indirect_jmp) {
-       outfile << "im truee!!!!!!!!!!!!!";
+        if (bbl->is_indirect_jmp) {
+            outfile << "im truee!!!!!!!!!!!!!";
             for (int i = 0; i < MAX_TARG; ++i) {
                 outfile << ", 0x" << std::hex << bbl->target_addr[i]
                         << ", " << std::dec << bbl->targ_exec_count[i];
             }
-       } else {
+        } else {
             for (int i = 0; i < MAX_TARG; ++i) {
                 outfile << ", 0x0, 0";
             }
