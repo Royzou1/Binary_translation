@@ -1137,7 +1137,7 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
 
                 bool isRtnHead = (RTN_Address(rtn) == addr);
-                
+                bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 // Check for fallthrough from previous instruction
                 if (isStart) {
                     if (bbl_num > 0 && INS_Valid(prev)) {
@@ -1166,7 +1166,7 @@ int find_candidate_rtns_for_translation(IMG img)
                     return -1;
                 }
 
-                bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
+                
 		  
                 if (isStart) {
                     //in_bbl = true;
