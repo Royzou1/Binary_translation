@@ -853,7 +853,7 @@ int emit_start_bbl(xed_state_t* dstate, UINT64* counter_ptr)
 
         int rc = add_new_instr_entry(&xedd, 0x0, olen, false);
         if (rc < 0) {
-            cerr << "ERROR: failed to add counter increment instruction" << endl;
+            cerr << "ERROR: failed to raise the counter" << endl;
             return -1;
         }
     }
@@ -1061,8 +1061,7 @@ int find_candidate_rtns_for_translation(IMG img)
 			//in_bbl = false;
 		    }
 
-		   prev = ins;
-                
+		   prev = ins; 
                 
             }
 
