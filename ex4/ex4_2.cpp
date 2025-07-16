@@ -116,18 +116,6 @@ char *tc;
 unsigned tc_cursor = 0;
 
 
-/* ---------------------------------------------------------- */
-/* Helpers for instrumentation instructions                   */
-/* ---------------------------------------------------------- */
-static ADDRINT pseudo_pc = 0x100000000000ULL;   // any unused value
-static inline ADDRINT next_pc(unsigned size)    // like a mini “assembler”
-{
-    ADDRINT cur = pseudo_pc;
-    pseudo_pc  += size;
-    return cur;
-}
-
-
 // Array of original target addresses that cannot
 // be relocated in the TC.
 ADDRINT *jump_to_orig_addr_map = nullptr;
@@ -865,7 +853,7 @@ int emit_start_bbl(xed_state_t* dstate, UINT64* counter_ptr)
 
         int rc = add_new_instr_entry(&xedd, 0x0, olen, false);
         if (rc < 0) {
-            cerr << "ERROR: failed to add counter increment instruction" << endl;
+            cerr << "ERROR: failed to raise the counter" << endl;
             return -1;
         }
     }
@@ -873,191 +861,234 @@ int emit_start_bbl(xed_state_t* dstate, UINT64* counter_ptr)
 }
 
 
-int encode_and_add_instr(xed_encoder_instruction_t* enc_instr,
-                         xed_state_t* dstate)
-{
+int encode_and_add_instr(xed_encoder_instruction_t* enc_instr, xed_state_t* dstate) {
     xed_encoder_request_t enc_req;
     xed_encoder_request_zero_set_mode(&enc_req, dstate);
+
     if (!xed_convert_to_encoder_request(&enc_req, enc_instr))
         return -1;
 
-    UINT8 enc[XED_MAX_INSTRUCTION_BYTES];
-    unsigned olen = 0;
-    if (xed_encode(&enc_req, enc, sizeof(enc), &olen) != XED_ERROR_NONE)
+    unsigned int olen = 0;
+    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+    UINT8 encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+
+    xed_error_enum_t err = xed_encode(&enc_req, encoded_ins, ilen, &olen);
+    if (err != XED_ERROR_NONE)
         return -1;
 
     xed_decoded_inst_t xedd;
     xed_decoded_inst_zero_set_mode(&xedd, dstate);
-    if (xed_decode(&xedd, enc, olen) != XED_ERROR_NONE)
+    if (xed_decode(&xedd, encoded_ins, olen) != XED_ERROR_NONE)
         return -1;
 
-    /* Give the map a monotonically increasing, unique “address” */
-    return add_new_instr_entry(&xedd, next_pc(olen), olen, false);
+    return add_new_instr_entry(&xedd, 0x0, olen, false);
 }
 
-int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx)
-{
-    xed_encoder_instruction_t i;
 
-#   define EMIT(...)  do {                      \
-            xed_inst2(&i, *dstate, __VA_ARGS__);\
-            if (encode_and_add_instr(&i, dstate) < 0) return -1; \
-        } while (0)
+int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
+    xed_encoder_instruction_t enc_instr;
+    xed_encoder_request_t enc_req;
+    xed_decoded_inst_t xedd_encode;
 
-    /* -------------------------------------------------- */
-    /* Save caller-visible registers                      */
-    /* -------------------------------------------------- */
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-        xed_reg(XED_REG_RAX));
+    ADDRINT ins_addr = INS_Address(ins);
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
 
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
-        xed_reg(XED_REG_RBX));
+    // Extract operand info
+    xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
+    xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
+    xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
+    xed_uint_t scale = xed_decoded_inst_get_scale(xedd, 0);
+    xed_uint_t width = xed_decoded_inst_get_memory_displacement_width_bits(xedd, 0);
+    unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd, 0);
 
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64),
-        xed_reg(XED_REG_RCX));
+    xed_reg_enum_t targ_reg = XED_REG_INVALID;
+    unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
+    if (memops == 0)
+        targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
 
-    /* -------------------------------------------------- */
-    /* Compute the indirect target in RAX                 */
-    /* -------------------------------------------------- */
-    xed_decoded_inst_t* xd = INS_XedDec(ins);
-    if (xed_decoded_inst_number_of_memory_operands(xd) == 0) {
-        /* form “mov rax, <targ_reg>” */
-        xed_reg_enum_t tr = xed_decoded_inst_get_reg(xd, XED_OPERAND_REG0);
-        EMIT(XED_ICLASS_MOV, 64, xed_reg(XED_REG_RAX), xed_reg(tr));
-    } else {
-        EMIT(XED_ICLASS_MOV, 64,
-             xed_reg(XED_REG_RAX),
-             xed_mem_bisd(
-                 xed_decoded_inst_get_base_reg(xd,0),
-                 xed_decoded_inst_get_index_reg(xd,0),
-                 xed_decoded_inst_get_scale(xd,0),
-                 xed_disp(xed_decoded_inst_get_memory_displacement(xd,0),
-                          xed_decoded_inst_get_memory_displacement_width_bits(xd,0)),
-                 xed_decoded_inst_get_memop_address_width(xd,0)));
+    char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
+    unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+    unsigned int olen = 0;
+    int rc;
+
+    for (int i = 0; i < 23; i++) {
+        //xed_inst2(&enc_instr, *dstate, XED_ICLASS_NOP, 64); // Default NOP, will be overwritten
+
+        switch (i) {
+            case 0:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 1:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_reg(XED_REG_RBX));
+                break;
+
+            case 2:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 3:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_reg(XED_REG_RCX));
+                break;
+
+            case 4:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 5:
+                if (targ_reg == XED_REG_RAX || base_reg == XED_REG_RAX || index_reg == XED_REG_RAX) {
+                    xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                              xed_reg(XED_REG_RAX),
+                              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+                }
+                break;
+
+            case 6:
+                if (base_reg == XED_REG_RIP) {
+                    unsigned int orig_size = xed_decoded_inst_get_length(xedd);
+                    xed_int64_t new_disp = ins_addr + disp + orig_size;
+                    xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                              xed_reg(XED_REG_RAX),
+                              xed_mem_bisd(XED_REG_INVALID, index_reg, scale, xed_disp(new_disp, 32), mem_addr_width));
+                } else if (targ_reg != XED_REG_RAX) {
+                    xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                              xed_reg(XED_REG_RAX),
+                              (targ_reg != XED_REG_INVALID) ? xed_reg(targ_reg) :
+                              xed_mem_bisd(base_reg, index_reg, scale, xed_disp(disp, width), mem_addr_width));
+                }
+                break;
+
+            case 7:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RBX),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 8:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_AND, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_imm0(MAX_TARG_ADDRS, 8));
+                break;
+
+            case 9:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RCX),
+                          xed_imm0((ADDRINT)&bb_map_targ_addr[bbl_idx][0], 64));
+                break;
+
+            case 10:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
+                          xed_reg(XED_REG_RBX));
+                break;
+
+            case 11:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RBX),
+                          xed_imm0((ADDRINT)&bb_map_targ_count[bbl_idx][0], 64));
+                break;
+
+            case 12:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RCX),
+                          xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64));
+                break;
+
+            case 13:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
+                          xed_reg(XED_REG_RCX),
+                          xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
+                break;
+
+            case 14:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
+                          xed_reg(XED_REG_RCX));
+                break;
+
+            case 15:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64));
+                break;
+
+            case 16:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RCX),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 17:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
+                break;
+
+            case 18:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RBX),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 19:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64));
+                break;
+
+            case 20:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_LEA, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+                break;
+
+            case 21:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&bb_map_mem[bbl_idx].exec_counter, 64), 64),
+                          xed_reg(XED_REG_RAX));
+                break;
+
+            case 22:
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+                break;
+        }
+
+        // Encode -> Decode -> Insert
+        xed_encoder_request_zero_set_mode(&enc_req, dstate);
+        if (!xed_convert_to_encoder_request(&enc_req, &enc_instr))
+            return -1;
+
+        xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(encoded_ins), ilen, &olen);
+        if (xed_error != XED_ERROR_NONE)
+            return -1;
+
+        xed_decoded_inst_zero_set_mode(&xedd_encode, dstate);
+        if (xed_decode(&xedd_encode, reinterpret_cast<UINT8*>(encoded_ins), olen) != XED_ERROR_NONE)
+            return -1;
+
+        rc = add_new_instr_entry(&xedd_encode, ins_addr, olen, false);
+        if (rc < 0) {
+            cerr << "ERROR: failed to add indirect count instruction" << endl;
+            return -1;
+        }
     }
-
-    /* -------------------------------------------------- */
-    /* Iterate over bb_map_targ_addr[bbl_idx][rcx]        */
-    /* -------------------------------------------------- */
-    EMIT(XED_ICLASS_XOR, 32, xed_reg(XED_REG_ECX), xed_reg(XED_REG_ECX));   // rcx = 0
-    /* L1: */
-    ADDRINT L1 = next_pc(0);                 // remember its “address”
-
-    /* load  rbx = bb_map_targ_addr[bbl_idx][rcx] */
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RBX),
-        xed_mem_bisd(XED_REG_INVALID, XED_REG_RCX, 8,
-            xed_disp((ADDRINT)&bb_map_targ_addr[bbl_idx][0], 64), 64));
-
-    /* if rbx == 0 -> L2 */
-    EMIT(XED_ICLASS_CMP, 64, xed_reg(XED_REG_RBX), xed_imm0(0,8));
-    xed_relbr_t rel0 = xed_relbr(0, 32);
-    xed_inst1(&i, *dstate, XED_ICLASS_JE, 0, rel0);
-    int je0 = encode_and_add_instr(&i, dstate);               // will be patched later
-
-    /* if rbx == rax -> L3 */
-    EMIT(XED_ICLASS_CMP, 64, xed_reg(XED_REG_RBX), xed_reg(XED_REG_RAX));
-    xed_inst1(&i, *dstate, XED_ICLASS_JE, 0, rel0);
-    int je1 = encode_and_add_instr(&i, dstate);
-
-    /* rcx++ ; if rcx==MAX_TARG -> L4 ; jmp L1 */
-    EMIT(XED_ICLASS_LEA, 64,
-        xed_reg(XED_REG_RCX),
-        xed_mem_bd(XED_REG_RCX, xed_disp(1,8), 64));
-
-    EMIT(XED_ICLASS_CMP, 32, xed_reg(XED_REG_ECX), xed_imm0(MAX_TARG,8));
-    xed_inst1(&i, *dstate, XED_ICLASS_JE, 0, rel0);
-    int je2 = encode_and_add_instr(&i, dstate);
-
-    /* jmp L1 (backward) */
-    ADDRINT cur_after_cmp = pseudo_pc;               // location of this JMP
-    xed_relbr_t relL1 = xed_relbr((INT32)(L1 - (cur_after_cmp + 5)), 32);
-    EMIT(XED_ICLASS_JMP, 0, relL1);
-
-    /* -------------------------------------------------- */
-    /* L2: add new address                                */
-    /* -------------------------------------------------- */
-    ADDRINT L2 = pseudo_pc;          // resolve first JE later
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bisd(XED_REG_INVALID, XED_REG_RCX, 8,
-            xed_disp((ADDRINT)&bb_map_targ_addr[bbl_idx][0],64),64),
-        xed_reg(XED_REG_RAX));
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bisd(XED_REG_INVALID, XED_REG_RCX, 8,
-            xed_disp((ADDRINT)&bb_map_targ_count[bbl_idx][0],64),64),
-        xed_imm0(1,8));
-
-    xed_inst1(&i, *dstate, XED_ICLASS_JMP, 0, rel0);
-    int jmp_to_L4_from_L2 = encode_and_add_instr(&i, dstate);
-
-    /* -------------------------------------------------- */
-    /* L3: update existing counter                        */
-    /* -------------------------------------------------- */
-    ADDRINT L3 = pseudo_pc;          // resolve second JE later
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RBX),
-        xed_mem_bisd(XED_REG_INVALID, XED_REG_RCX, 8,
-            xed_disp((ADDRINT)&bb_map_targ_count[bbl_idx][0],64),64));
-
-    EMIT(XED_ICLASS_ADD, 64, xed_reg(XED_REG_RBX), xed_imm0(1,8));
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_mem_bisd(XED_REG_INVALID, XED_REG_RCX, 8,
-            xed_disp((ADDRINT)&bb_map_targ_count[bbl_idx][0],64),64),
-        xed_reg(XED_REG_RBX));
-
-    xed_inst1(&i, *dstate, XED_ICLASS_JMP, 0, rel0);
-    int jmp_to_L4_from_L3 = encode_and_add_instr(&i, dstate);
-
-    /* -------------------------------------------------- */
-    /* L4: restore caller state                           */
-    /* -------------------------------------------------- */
-    ADDRINT L4 = pseudo_pc;          // resolve je2 and the two jmps above
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RCX),
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem,64),64));
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RBX),
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem,64),64));
-
-    EMIT(XED_ICLASS_MOV, 64,
-        xed_reg(XED_REG_RAX),
-        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem,64),64));
-
-    /* -------------------------------------------------- */
-    /* Patch the forward displacements                    */
-    /* -------------------------------------------------- */
-    auto patch = [&](int map_entry, ADDRINT dest) {
-        if (map_entry < 0) return;
-        instr_map_t& m = instr_map[map_entry];
-        xed_decoded_inst_t x;
-        xed_decoded_inst_zero_set_mode(&x,&dstate);
-        xed_decode(&x, (UINT8*)m.encoded_ins, XED_MAX_INSTRUCTION_BYTES);
-        xed_encoder_request_init_from_decode(&x);
-        ADDRINT src_addr = m.orig_ins_addr;          // our fake pc
-        INT32   new_disp = (INT32)(dest - (src_addr + m.size));
-        xed_encoder_request_set_branch_displacement(&x,new_disp,4);
-        unsigned new_sz = 0;
-        xed_encode(&x,(UINT8*)m.encoded_ins,XED_MAX_INSTRUCTION_BYTES,&new_sz);
-        m.orig_targ_addr = dest;                     // enable chaining logic
-    };
-
-    patch(je0,  L2);
-    patch(je1,  L3);
-    patch(je2,  L4);
-    patch(jmp_to_L4_from_L2, L4);
-    patch(jmp_to_L4_from_L3, L4);
 
     return 0;
 }
+
+
 
 
 /*****************************************/
@@ -1084,7 +1115,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
             INS prev = INS_Invalid();
             
-//            bool in_bbl = false;
+            // bool in_bbl = false;
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
@@ -1106,31 +1137,18 @@ int find_candidate_rtns_for_translation(IMG img)
                 }
 
                 bool isRtnHead = (RTN_Address(rtn) == addr);
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
-                if (rc < 0) {
-                    cerr << "ERROR: failed during instruction translation." << endl;
-                    return -1;
-                }
-
                 
-                bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
-		  
+                // Check for fallthrough from previous instruction
                 if (isStart) {
-                    //in_bbl = true;
-                    emit_start_bbl(&dstate, &bb_map_mem[bbl_num].exec_counter);
-                    bb_map_mem[bbl_num].addr = addr;
-
-                    // Check for fallthrough from previous instruction
                     if (bbl_num > 0 && INS_Valid(prev)) {
                         if (INS_IsDirectControlFlow(prev) &&
-                        addr == (INS_Address(prev) + INS_Size(prev))) {
-                        bb_map_mem[bbl_num - 1].is_direct_jmp = true;
-                        emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
+                            addr == (INS_Address(prev) + INS_Size(prev))) {
+                            bb_map_mem[bbl_num - 1].is_direct_jmp = true;
+                            emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
                         }
                     }
-		        }
+                }
 
-		   
                 // Mark this instruction as ending the current basic block
                 if (INS_IsControlFlow(ins)) {
                     if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
@@ -1140,7 +1158,23 @@ int find_candidate_rtns_for_translation(IMG img)
                     bbl_num++;
                     //in_bbl = false;
                 }
-		        prev = ins;    
+
+                //emiiting the current ins
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins), isRtnHead);
+                if (rc < 0) {
+                    cerr << "ERROR: failed during instruction translation." << endl;
+                    return -1;
+                }
+
+                bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
+		  
+                if (isStart) {
+                    //in_bbl = true;
+                    emit_start_bbl(&dstate, &bb_map_mem[bbl_num].exec_counter);
+                    bb_map_mem[bbl_num].addr = addr;
+
+                }
+		        prev = ins; 
             }
 
             if (KnobVerbose) {
