@@ -19,6 +19,7 @@ extern "C" {
 #include <values.h>
 #include <map>
 #include <vector>
+#include <array>
 #include <algorithm>
 
 /* ===================================================================== */
