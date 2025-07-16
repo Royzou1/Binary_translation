@@ -35,8 +35,8 @@ static uint64_t rax_mem, rbx_mem, rcx_mem;
 
 //static ADDRINT bb_addr_mem[MAX_BBL_NUM] = {0};
 
-static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
-static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
+//static uint64_t bb_map_targ_addr[MAX_BBL_NUM][MAX_TARG]={0};
+//static uint64_t bb_map_targ_count[MAX_BBL_NUM][MAX_TARG]={0};
 
 struct bbl_profile {
  
