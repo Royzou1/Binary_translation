@@ -1141,16 +1141,6 @@ int find_candidate_rtns_for_translation(IMG img)
                 bool isRtnHead = (RTN_Address(rtn) == addr);
                 bool isStart = !INS_Valid(prev) || INS_IsControlFlow(prev);
                 // Check for fallthrough from previous instruction
-                if (isStart) {
-                    if (bbl_num > 0 && INS_Valid(prev)) {
-                        if (INS_IsDirectControlFlow(prev) &&
-                            addr == (INS_Address(prev) + INS_Size(prev))) {
-                            bb_map_mem[bbl_num - 1].is_direct_jmp = true;
-                            emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
-                        }
-                    }
-                }
-
                 // Mark this instruction as ending the current basic block
                 if (INS_IsControlFlow(ins)) {
                     if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
@@ -1159,6 +1149,18 @@ int find_candidate_rtns_for_translation(IMG img)
                     }
                     bbl_num++;
                     //in_bbl = false;
+                }
+
+
+
+                if (isStart) {
+                    if (bbl_num > 0 && INS_Valid(prev)) {
+                        if (INS_IsDirectControlFlow(prev) &&
+                            addr == (INS_Address(prev) + INS_Size(prev))) {
+                            bb_map_mem[bbl_num - 1].is_direct_jmp = true;
+                            emit_start_bbl(&dstate, &bb_map_mem[bbl_num - 1].fallthrough_num);
+                        }
+                    }
                 }
 
                 //emiiting the current ins
