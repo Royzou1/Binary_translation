@@ -1381,17 +1381,25 @@ VOID Fini(INT32 code, VOID* v)
                 << ", " << bbl->fallthrough_num;
 
         if (bbl->is_indirect_jmp) {
-            outfile << "im truee!!!!!!!!!!!!!";
-            for (int i = 0; i < MAX_TARG; ++i) {
+            // sort the indices 0-(MAX_TARG-1) by descending exec-count
+            array<int, MAX_TARG> idx;
+            iota(idx.begin(), idx.end(), 0);
+
+            sort(idx.begin(), idx.end(),
+                [&](int a, int b) {
+                    return bbl->targ_exec_count[a] > bbl->targ_exec_count[b];
+                });
+
+            for (int k = 0; k < MAX_TARG; ++k) {
+                int i = idx[k];
                 outfile << ", 0x" << std::hex << bbl->target_addr[i]
                         << ", " << std::dec << bbl->targ_exec_count[i];
             }
         } else {
-            for (int i = 0; i < MAX_TARG; ++i) {
+            for (int i = 0; i < MAX_TARG; ++i)
                 outfile << ", 0x0, 0";
-            }
         }
-
+        
         outfile << endl;
     }
 
