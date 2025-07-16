@@ -983,7 +983,7 @@ int emit_end_bbl(xed_state_t* dstate, INS ins, unsigned bbl_idx) {
             case 9: // RCX = &target_address[0]
                 xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RCX),
-                          xed_imm0((ADDRINT)&(bb_map_mem[bbl_idx].target_address[0]), 64));
+                          xed_imm0((ADDRINT)&(bb_map_mem[bbl_idx].target_addr[0]), 64));
                 break;
 
             case 10: //&target_address[offset] = address
