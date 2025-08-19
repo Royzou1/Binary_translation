@@ -72,6 +72,10 @@ extern "C" {
 
 using namespace std;
 
+static inline bool IsBblTerminator(INS ins) {
+    return INS_IsBranchOrCall(ins) || INS_IsRet(ins) || !INS_HasFallThrough(ins);
+}
+
 /*======================================================================*/
 /* commandline switches                                                 */
 /*======================================================================*/
@@ -778,13 +782,9 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
 #include <array>
 array<bool,3> is_killed(INS ins) {
   array<bool,3> killed = {false, false, false};
-
-  BBL bbl = INS_Bbl(ins);
-  INS last = BBL_InsTail(bbl);
-
   bool seenRAX = false, seenRBX = false, seenRCX = false;
 
-  for (INS i = BBL_InsHead(bbl); INS_Valid(i); i = INS_Next(i)) {
+  for (INS i = ins; INS_Valid(i); i = INS_Next(i)) {
       // --- RAX ---
       if (!seenRAX) {
           if (INS_RegRContain(i, REG_RAX)) {
@@ -819,7 +819,7 @@ array<bool,3> is_killed(INS ins) {
       }
 
       // stop at end of BBL or when all decided
-      if ((seenRAX && seenRBX && seenRCX) || i == last)
+      if ((seenRAX && seenRBX && seenRCX) || IsBblTerminator(i))
           break;
   }
 
