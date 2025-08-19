@@ -773,96 +773,13 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
     }
     return 0;
 }
-/* chats foo*/
 
-// Heuristic: a basic block ends at a control-transfer or a non-fallthrough insn.
-static inline bool IsBblTerminator(INS ins) {
-    return INS_IsBranchOrCall(ins) || INS_IsRet(ins) || !INS_HasFallThrough(ins);
-}
-
-// Fills `out[0..*count-1]` with up to 3 regs defined by `ins` whose values
-// are never read again before the end of the current basic block.
-static inline void find_3_killed_regs(INS ins, REG out[3], int *count) {
-    out[0] = out[1] = out[2] = REG_INVALID();
-    if (count) *count = 0;
-
-    // Collect regs written by this instruction (coalesce to full regs, dedup).
-    std::unordered_set<REG> defs;
-    const UINT32 nw = INS_MaxNumWRegs(ins);
-    for (UINT32 i = 0; i < nw; i++) {
-        REG r = REG_FullRegName(INS_RegW(ins, i));
-        if (r != REG_INVALID()) defs.insert(r);
-    }
-    if (defs.empty()) return;
-
-    // Track which of those defs are later read in the same BB.
-    std::unordered_set<REG> usedLater;
-
-    // Scan forward to the end of the BB.
-    for (INS it = INS_Next(ins); INS_Valid(it); it = INS_Next(it)) {
-        // Any read of a def makes it "used".
-        const UINT32 nr = INS_MaxNumRRegs(it);
-        for (UINT32 i = 0; i < nr; i++) {
-            REG rr = REG_FullRegName(INS_RegR(it, i));
-            if (defs.count(rr)) usedLater.insert(rr);
-        }
-        if (IsBblTerminator(it)) break;
-        // Optional early exit if we've already seen all defs used
-        if (usedLater.size() == defs.size()) break;
-    }
-
-    // "Killed" within the BB == defined by `ins` and never read later in the BB.
-    int k = 0;
-    for (REG r : defs) {
-        if (!usedLater.count(r)) {
-            out[k++] = r;
-            if (k == 3) break;
-        }
-    }
-    if (count) *count = k;
-}
-
-REG killed[3]; int n = 0;
-find_3_killed_regs(ins, killed, &n);
-
-static bool ins_touches_reg(INS ins, REG r) {
-    return INS_RegRContain(ins, r) || INS_RegWContain(ins, r);
-}
-
-static REG pick_temp_reg_not_three(INS ins) {
-    static const REG cand[] = {
-        REG_R11, REG_R10, REG_R9, REG_R8, REG_RDI, REG_RSI, REG_RDX
-        // שים לב: בכוונה לא RAX/RBX/RCX
-    };
-    for (REG r : cand) {
-        if (!ins_touches_reg(ins, r)) return r;
-    }
-    return REG_INVALID();
-}
-
-// אם אתה צריך שני רגיסטרים זמניים:
-static std::pair<REG,REG> pick_two_temps_not_three(INS ins) {
-    REG first = pick_temp_reg_not_three(ins);
-    if (first == REG_INVALID()) return {REG_INVALID(), REG_INVALID()};
-    // נסה לבחור שני שונה:
-    static const REG cand[] = {
-        REG_R11, REG_R10, REG_R9, REG_R8, REG_RDI, REG_RSI, REG_RDX
-    };
-    for (REG r : cand) {
-        if (r != first && !ins_touches_reg(ins, r)) return {first, r};
-    }
-    return {first, REG_INVALID()};
-}
-
-/*end of chats foo*/
 
 /**************************/
 /* add_profiling_instrs() */
 /**************************/
 int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsigned bbl_num)
 {
-  
-
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
 
