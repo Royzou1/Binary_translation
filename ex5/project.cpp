@@ -1712,7 +1712,7 @@ int commit_translated_rtns_to_tc2()
 }
 
 int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
-                        char*[XED_MAX_INSTRUCTION_BYTES] encode_ins, 
+                        char* encode_ins[XED_MAX_INSTRUCTION_BYTES], 
                         unsigned int * size)
 {
   unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
