@@ -1761,29 +1761,85 @@ void create_tc2_thread_func(void *v)
                 total_jumps_counter += curr_bbl.targ_count[i];
             }
 
-          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) > KnobProfileThreshold) { //insert commads to instr map
-            //store rax -> rax mem 1
+            ADDRINT hot_target = targ_addr[index]
+
             
-            //store rbx 2 + 3
+          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) { //insert commads to instr map
+              xed_encoder_instruction_t xin;
+              xed_inst1(&xin, dstate, XED_ICLASS_PUSH, 64, xed_reg(XED_REG_RBX));
+              encode(xin);
+              // mov rbx, imm64  ; rbx = hottest-orig-targ-addr
+              {
+                  xed_encoder_instruction_t xin;
+                  xed_inst2(&xin, dstate, XED_ICLASS_MOV, 64,
+                            xed_reg(XED_REG_RBX),
+                            xed_imm0((xed_uint64_t)hot_targ, 64));
+                  encode(xin);
+              }
+                // cmp rax, rbx
+                {
+                    xed_encoder_instruction_t xin;
+                    xed_inst2(&xin, dstate, XED_ICLASS_CMP, 64,
+                              xed_reg(XED_REG_RAX),
+                              xed_reg(XED_REG_RBX));
+                    encode(xin);
+                }
+                // cmove rax, rbx   ; if equal, rax := translated
+                {
+                    xed_encoder_instruction_t xin;
+                    xed_inst2(&xin, dstate, XED_ICLASS_CMOVZ, 64,
+                              xed_reg(XED_REG_RAX),
+                              xed_reg(XED_REG_RBX));
+                    encode(xin);
+                }
+                // pop rbx
+                {
+                    xed_encoder_instruction_t xin;
+                    xed_inst1(&xin, dstate, XED_ICLASS_POP, 64, xed_reg(XED_REG_RBX));
+                    encode(xin);
+                }
 
-            // pop rax_mem to rax 4
+                    const ADDRINT pc = instr_map[i].orig_ins_addr; //PC IS THE ADDR OF ORIG_INS
+                    char jmp_buf[XED_MAX_INSTRUCTION_BYTES] = {0};
+                    int  olen = encode_jump_instr(pc, hot_targ, jmp_buf);
+                    if (olen > 0) {
+                        // Store the newly encoded instruction bytes into the map entry
+                        memcpy(instr_map[i].encoded_ins, jmp_buf, (size_t)olen);
+                        instr_map[i].size = (unsigned)olen;
+                    } else {
+                        // If encoding fails for any reason, keep the original instruction as-is.
+                        // (No-op fallback keeps correctness)
+                        if (KnobVerbose) {
+                            cerr << "WARN: de-virt encode_jump_instr failed at i=" << dec << i
+                                 << " hot_targ=0x" << hex << hot_targ << endl;
+                        }
+                    }  
             
-            // rbx = og_hot_add 5 
+            //store rax -> rax mem -11
+            
+            //store rbx -9 -10
 
-            //jne rax rbx + ? | 6
+            // pop rax_mem to rax -8
+            
+            // rbx = og_hot_add -7 
+            
+            // compare rax rbx | -6
+            
+            //pop rbx -4  -5
 
-            //pop rbx 7 + 8
+            //jne L | -3
 
-            //go to open (tc2_hot_addr) 9
+            //jump tc1_hot_addr - 2
 
-            //pop rbx 10 + 11
+            //L :
 
-            //pop rax 12
-
-            set instr_map[i-4] = load rbx
-            set instr_map[i-3] = jne
-            set instr_map[i-2] = jump ADDR
-            set instr_map[i-1]= 
+            //mov rax_mem -> rax                     |i - 1
+            instr_map[i - 1].encoded_ins = 
+            instr_map[i - 1].size = 
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+               xed_reg(XED_REG_RAX), // Destination reg op.
+               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+            
           }
         }
 
