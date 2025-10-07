@@ -1848,8 +1848,8 @@ void create_tc2_thread_func(void *v)
               xed_reg(XED_REG_RAX));
             
             set_encode_and_size(&enc_instr, 
-                                &instr_map[i-11].encoded_ins, 
-                                &instr_map[i-11].size);
+                                &(instr_map[i-11].encoded_ins), 
+                                &(instr_map[i-11].size));
             
             //store rbx -9 -10
 
