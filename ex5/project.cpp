@@ -107,7 +107,8 @@ KNOB<BOOL> KnobProbeBackwardJumps(KNOB_MODE_WRITEONCE,    "pintool",
 KNOB<BOOL>   KnobNoReorderCode(KNOB_MODE_WRITEONCE,    "pintool",
     "no_code_reorder", "0", "Do not reorder code in TC2 (relevant only with -create_tc2 flag)");
 
-
+KNOB<UINT> KnobProfileThreshold(KNOB_MODE_WRITEONCE,    "pintool",
+                                     "prof_threshold", "95", "Profile percentage threshold");
 /* ===================================================================== */
 /* Global Variables */
 /* ===================================================================== */
@@ -1522,8 +1523,8 @@ int create_tc(IMG img)
                     rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, killed_reg);
                     if (rc < 0)
                       return -1;
+                  }
                 }
-}
           
                 // Add ins to instr_map:
                 //
@@ -1751,6 +1752,18 @@ void create_tc2_thread_func(void *v)
          ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
          instr_map[i].orig_targ_addr = new_targ_addr;
        }
+       
+        // adding devirtualition
+        if (instr_map[i].ins == indirect jump ) {
+          og_jump_add = ;
+          freq_jump_add = 100 * couter_jump_to_hot / counter_jump ;
+          if (freq_jump_add > knob) { //insert commads to instr map
+            set instr_map[i-4] = load rbx
+            set instr_map[i-3] = jne
+            set instr_map[i-2] = jump ADDR
+            set instr_map[i-1]
+          }
+        }
     }
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
@@ -1758,6 +1771,8 @@ void create_tc2_thread_func(void *v)
     }
     
     cerr << "after modifying instr_map" << endl;
+    
+
 
     // Debug print.
     if (KnobDumpProfile)
