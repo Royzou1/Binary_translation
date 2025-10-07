@@ -1711,6 +1711,29 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
+int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
+                        char *encode_ins, 
+                        int * size)
+{
+  unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+
+  // Convert the encoding instr to a valid encoder request.
+  xed_encoder_request_t enc_req;    
+  xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+  xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, enc_instr);
+  if (!convert_ok) {
+      cerr << "conversion to encode request failed" << endl;
+      return -1;
+  }
+  
+  // Encode instr.
+  xed_error_enum_t xed_error = xed_encode(&enc_req,
+            reinterpret_cast<UINT8*>(encode_ins), ilen, size);
+  if (xed_error != XED_ERROR_NONE) {
+      cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+    return -1;
+  }
+}
 
 /****************************/
 /* create_tc2_thread_func() */
@@ -1765,7 +1788,7 @@ void create_tc2_thread_func(void *v)
 
             
           if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) { //insert commads to instr map
-              xed_encoder_instruction_t xin;
+            /*xed_encoder_instruction_t xin;
               xed_inst1(&xin, dstate, XED_ICLASS_PUSH, 64, xed_reg(XED_REG_RBX));
               encode(xin);
               // mov rbx, imm64  ; rbx = hottest-orig-targ-addr
@@ -1814,8 +1837,17 @@ void create_tc2_thread_func(void *v)
                                  << " hot_targ=0x" << hex << hot_targ << endl;
                         }
                     }  
+            */
             
-            //store rax -> rax mem -11
+            xed_encoder_instruction_t enc_instr;
+            // Save RAX - MOV RAX into rax_mem | i-11
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
+              xed_reg(XED_REG_RAX));
+            
+            set_encode_and_size(&enc_instr, 
+                                &instr_map[i-11].encode_ins, 
+                                &instr_map[i-11].size);
             
             //store rbx -9 -10
 
@@ -1834,12 +1866,6 @@ void create_tc2_thread_func(void *v)
             //L :
 
             //mov rax_mem -> rax                     |i - 1
-            instr_map[i - 1].encoded_ins = 
-            instr_map[i - 1].size = 
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-               xed_reg(XED_REG_RAX), // Destination reg op.
-               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-            
           }
         }
 
