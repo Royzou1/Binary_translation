@@ -1712,7 +1712,7 @@ int commit_translated_rtns_to_tc2()
 }
 
 int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
-                        char* encode_ins[XED_MAX_INSTRUCTION_BYTES], 
+                        char* encode_ins, 
                         unsigned int * size)
 {
   unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
@@ -1848,7 +1848,7 @@ void create_tc2_thread_func(void *v)
               xed_reg(XED_REG_RAX));
             
             set_encode_and_size(&enc_instr, 
-                                &(instr_map[i-11].encoded_ins), 
+                                (instr_map[i-11].encoded_ins), 
                                 &(instr_map[i-11].size));
             
             //store rbx -9 -10
