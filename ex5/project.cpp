@@ -150,6 +150,7 @@ typedef enum {
 
 // instruction map with an entry for each new instruction:
 typedef struct {
+    INS ins; // was added for de-virt
     ADDRINT orig_ins_addr;
     ADDRINT new_ins_addr;
     ADDRINT orig_targ_addr;
@@ -680,7 +681,7 @@ int disable_profiling_in_tc(instr_map_t * instr_map, unsigned num_of_instr_map_e
 /*************************/
 /* add_new_instr_entry() */
 /*************************/
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type)
+int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, INS ins)
 {
     // copy orig instr to instr map:
     ADDRINT orig_targ_addr = 0x0;
@@ -708,6 +709,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_typ
 
     // Add a new entry to instr_map:
     //
+    instr_map[num_of_instr_map_entries].ins = ins;
     instr_map[num_of_instr_map_entries].orig_ins_addr = pc;
     instr_map[num_of_instr_map_entries].new_ins_addr = 0x0;
     instr_map[num_of_instr_map_entries].orig_targ_addr = orig_targ_addr;
@@ -737,7 +739,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_typ
 /********************/
 /* add_prof_instr() */
 /********************/
-int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
+int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr, INS ins) {
     char encoded_ins[XED_MAX_INSTRUCTION_BYTES];
     unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
     unsigned int olen = 0;
@@ -767,7 +769,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
         cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
         return -1;;
     }
-    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns);
+    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, ins);
     if (rc < 0) {
       cerr << "ERROR: failed during instructon translation." << endl;
       return -1;
@@ -787,7 +789,7 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
   // Add NOP instr (to be overwritten later on by a jmp that skips
   // the profiling, once profiling is done).
   xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
-  if (add_prof_instr(ins_addr, &enc_instr) < 0)
+  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
     return -1;
 
   // Decide where to save RAX up-front so both the indirect-jump block
@@ -807,7 +809,7 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
               xed_reg(XED_REG_RAX));
   }
-  if (add_prof_instr(ins_addr, &enc_instr) < 0)
+  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
     return -1;
 
   // -----------------------------
@@ -835,23 +837,23 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_reg(XED_REG_RBX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // Save RCX via RAX (2 steps).
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_reg(XED_REG_RCX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64),
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // If the original jmp uses RAX (as base/index/target) we must restore the
     // original RAX temporarily from the SAME place we saved it.
@@ -867,7 +869,7 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
                   xed_reg(XED_REG_RAX),
                   xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
       }
-      if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+      if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
     }
 
     // Convert addressing to load the target into RAX.
@@ -887,77 +889,77 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
                  : xed_mem_bisd(base_reg, index_reg, scale,
                                 xed_disp(disp, width), mem_addr_width)));
     }
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // Copy target from RAX to RBX, then index & update tables via RCX/RBX.
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RBX),
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // AND RAX, MAX_TARG_ADDRS  (RFLAGS modified; ok)
     xed_inst2(&enc_instr, dstate, XED_ICLASS_AND, 64,
               xed_reg(XED_REG_RAX),
               xed_imm0(MAX_TARG_ADDRS, 8));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // MOV RCX, &bbl_map[bbl_num].targ_addr[0]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RCX),
               xed_imm0((ADDRINT)&(bbl_map[bbl_num].targ_addr[0]), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // MOV [RCX + 8*RAX], RBX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
               xed_reg(XED_REG_RBX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // MOV RBX, &bbl_map[bbl_num].targ_count[0]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RBX),
               xed_imm0((ADDRINT)&(bbl_map[bbl_num].targ_count[0]), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // MOV RCX, [RBX + 8*RAX]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RCX),
               xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // LEA RCX, [RCX + 1]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
               xed_reg(XED_REG_RCX),
               xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // MOV [RBX + 8*RAX], RCX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
               xed_reg(XED_REG_RCX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // Restore RCX via RAX (2 steps).
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RCX),
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     // Restore RBX via RAX (2 steps).
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RBX),
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
   } // end indirect-jump profiling
 
   // -----------------------------
@@ -968,19 +970,19 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
   xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
             xed_reg(XED_REG_RAX),
             xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+  if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
   // LEA RAX, [RAX + 1]
   xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
             xed_reg(XED_REG_RAX),
             xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+  if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
   // MOV [counter_addr], RAX
   xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
             xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64),
             xed_reg(XED_REG_RAX));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+  if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
 
   // ---- FINAL RESTORE of RAX (skip if it will be killed later) ----
   if (killed_reg == REG_RAX) {
@@ -990,13 +992,13 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_reg(INS_XedExactMapFromPinReg(killed_reg)));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
   } else {
     // MOV RAX, [rax_mem]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+    if (add_prof_instr(ins_addr, &enc_instr,ins) < 0) return -1;
   }
 
   return 0;
@@ -1479,7 +1481,7 @@ int create_tc(IMG img)
                       cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
                       return -1;;
                   }
-                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type);
+                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, ins);
                   if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1535,7 +1537,7 @@ int create_tc(IMG img)
                     return -1;
                 }
 
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, ins);
                 if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1729,23 +1731,61 @@ void create_tc2_thread_func(void *v)
     // Step 2.1: Modify instr_map to be used for TC2.
     //
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {    
-       // Set new_ins_addr to be the orig_ins_addr.
-       instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
+        // Set new_ins_addr to be the orig_ins_addr.
+        instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
                         
-       // Skip the profiling instructions added in TC for each BBL.
-       if (instr_map[i].ins_type == ProfilingIns)
+        // Skip the profiling instructions added in TC for each BBL.
+        if (instr_map[i].ins_type == ProfilingIns)
          instr_map[i].size = 0;
        
-       // Skip the wide NOP instr at the Rtn head which was reserved
-       // for the probing jump from TC to TC2.
-       if (instr_map[i].ins_type == RtnHeadIns &&
+        // Skip the wide NOP instr at the Rtn head which was reserved
+        // for the probing jump from TC to TC2.
+        if (instr_map[i].ins_type == RtnHeadIns &&
            instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
          instr_map[i].size = 0;
        
-       // Remove unused NOPs.
-       if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
-           instr_map[i].xed_category == XED_CATEGORY_NOP)
-         instr_map[i].size = 0;
+        // Remove unused NOPs.
+        if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
+          instr_map[i].xed_category == XED_CATEGORY_NOP)
+          instr_map[i].size = 0;
+
+        INS ins = instr_map[i].ins;
+        // adding devirtualition
+        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { // FIXME: 
+            
+            bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num]
+            int index = 0 ; 
+            int total_jumps_counter = 0;
+            for (int i = 0 ; i <= MAX_TARG_ADDRS ; i++) {
+                index = (curr_bbl.targ_count[i] > curr_bbl.targ_count[index]) ? i : index;
+                total_jumps_counter += curr_bbl.targ_count[i];
+            }
+
+          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) > KnobProfileThreshold) { //insert commads to instr map
+            //store rax -> rax mem 1
+            
+            //store rbx 2 + 3
+
+            // pop rax_mem to rax 4
+            
+            // rbx = og_hot_add 5 
+
+            //jne rax rbx + ? | 6
+
+            //pop rbx 7 + 8
+
+            //go to open (tc2_hot_addr) 9
+
+            //pop rbx 10 + 11
+
+            //pop rax 12
+
+            set instr_map[i-4] = load rbx
+            set instr_map[i-3] = jne
+            set instr_map[i-2] = jump ADDR
+            set instr_map[i-1]= 
+          }
+        }
 
        // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
        if (instr_map[i].targ_map_entry >= 0) {
@@ -1753,17 +1793,7 @@ void create_tc2_thread_func(void *v)
          instr_map[i].orig_targ_addr = new_targ_addr;
        }
        
-        // adding devirtualition
-        if (instr_map[i].ins == indirect jump ) {
-          og_jump_add = ;
-          freq_jump_add = 100 * couter_jump_to_hot / counter_jump ;
-          if (freq_jump_add > knob) { //insert commads to instr map
-            set instr_map[i-4] = load rbx
-            set instr_map[i-3] = jne
-            set instr_map[i-2] = jump ADDR
-            set instr_map[i-1]
-          }
-        }
+        
     }
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
