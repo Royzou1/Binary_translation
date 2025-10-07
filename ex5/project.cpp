@@ -1839,9 +1839,9 @@ void create_tc2_thread_func(void *v)
                         }
                     }  
             */
-            static uint64_t rax_mem = 0;
-            xed_encoder_instruction_t enc_instr;
-
+            //static uint64_t rax_mem = 0;
+            //xed_encoder_instruction_t enc_instr;
+            cerr << "hey" << endl;
             // Save RAX - MOV RAX into rax_mem | i-11
             /*xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
