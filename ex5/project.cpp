@@ -1713,7 +1713,7 @@ int commit_translated_rtns_to_tc2()
 
 int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
                         char *encode_ins, 
-                        int * size)
+                        unsigned int * size)
 {
   unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
 
@@ -1733,6 +1733,7 @@ int set_encode_and_size(xed_encoder_instruction_t *enc_instr,
       cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
     return -1;
   }
+  return 0;
 }
 
 /****************************/
@@ -1838,15 +1839,16 @@ void create_tc2_thread_func(void *v)
                         }
                     }  
             */
-            
+            static uint64_t rax_mem = 0;
             xed_encoder_instruction_t enc_instr;
+
             // Save RAX - MOV RAX into rax_mem | i-11
             xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
               xed_reg(XED_REG_RAX));
             
             set_encode_and_size(&enc_instr, 
-                                &instr_map[i-11].encode_ins, 
+                                &instr_map[i-11].encoded_ins, 
                                 &instr_map[i-11].size);
             
             //store rbx -9 -10
