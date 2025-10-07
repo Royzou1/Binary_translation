@@ -1776,15 +1776,15 @@ void create_tc2_thread_func(void *v)
         // adding devirtualition
         if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) { // FIXME: 
             
-            bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num]
-            int index = 0 ; 
+            bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
+            int index = 0; 
             int total_jumps_counter = 0;
             for (int i = 0 ; i <= MAX_TARG_ADDRS ; i++) {
                 index = (curr_bbl.targ_count[i] > curr_bbl.targ_count[index]) ? i : index;
                 total_jumps_counter += curr_bbl.targ_count[i];
             }
 
-            ADDRINT hot_target = targ_addr[index]
+            //ADDRINT hot_target = curr_bbl.targ_addr[index];
 
             
           if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) { //insert commads to instr map
