@@ -1826,6 +1826,7 @@ void create_tc2_thread_func(void *v)
     //
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {   
+      /* debug print
       if (instr_map[i].indirect_profiled){
         cerr << "i = " << i << " indirect cmd" << endl;
         if (i < 11){
@@ -1841,29 +1842,50 @@ void create_tc2_thread_func(void *v)
           }
         }
       }
-       // Set new_ins_addr to be the orig_ins_addr.
-       instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
-                        
-       // Skip the profiling instructions added in TC for each BBL.
-       if (instr_map[i].ins_type == ProfilingIns)
-         instr_map[i].size = 0;
+      */
        
-       // Skip the wide NOP instr at the Rtn head which was reserved
-       // for the probing jump from TC to TC2.
-       if (instr_map[i].ins_type == RtnHeadIns &&
-           instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
-         instr_map[i].size = 0;
-       
-       // Remove unused NOPs.
-       if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
-           instr_map[i].xed_category == XED_CATEGORY_NOP)
-         instr_map[i].size = 0;
+      // Set new_ins_addr to be the orig_ins_addr.
+      instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
+                      
+      // Skip the profiling instructions added in TC for each BBL.
+      if (instr_map[i].ins_type == ProfilingIns)
+        instr_map[i].size = 0;
+      
+      // Skip the wide NOP instr at the Rtn head which was reserved
+      // for the probing jump from TC to TC2.
+      if (instr_map[i].ins_type == RtnHeadIns &&
+          instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
+        instr_map[i].size = 0;
+      
+      // Remove unused NOPs.
+      if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
+          instr_map[i].xed_category == XED_CATEGORY_NOP)
+        instr_map[i].size = 0;
 
-       // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
-       if (instr_map[i].targ_map_entry >= 0) {
-         ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
-         instr_map[i].orig_targ_addr = new_targ_addr;
-       }
+      // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
+      if (instr_map[i].targ_map_entry >= 0) {
+        ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
+        instr_map[i].orig_targ_addr = new_targ_addr;
+      }
+
+
+      /*****************de virtualtion *************************************/
+    
+      if (instr_map[i].indirect_profiled) {
+        bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
+        int index = 0; 
+        int total_jumps_counter = 0;
+        for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
+          index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
+          total_jumps_counter += curr_bbl.targ_count[j];
+          }
+          
+          if (total_jumps_counter == 0) continue;
+          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
+                cerr << "hello from the other side!!!!!!!!!!!!!!!!" << endl;
+
+
+      /*********************************************************************/
     }
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
