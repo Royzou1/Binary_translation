@@ -1795,7 +1795,18 @@ void create_tc2_thread_func(void *v)
             }
             
             if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-              //
+              // save rax
+              xed_encoder_instruction_t enc_instr;
+              static uint64_t rax_mem = 0;
+
+              // Save RAX - MOV RAX into rax_mem
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
+                xed_reg(XED_REG_RAX));
+              set_encode_and_size(&enc_instr, 
+                                  instr_map[i-11].encoded_ins,
+                                  &(instr_map[i-11].size));
+
             }
             
         }
