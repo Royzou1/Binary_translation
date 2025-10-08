@@ -800,9 +800,6 @@ int add_profiling_instrs( INS ins,
     return 0;
   }
 
-  xed_decoded_inst_t *xedd = INS_XedDec(ins);
-  base_reg2 = xed_decoded_inst_get_base_reg(xedd, 0);
-
   // Add NOP instr (to be overwritten later on by a jmp that skips
   // the profiling, once profiling is done).
   xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
@@ -830,6 +827,7 @@ int add_profiling_instrs( INS ins,
     // Retrieve the details about the mem operand.
     xed_decoded_inst_t *xedd = INS_XedDec(ins);
     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
+    base_reg2 = base_reg;
     xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
     xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
     xed_uint_t scale = xed_decoded_inst_get_scale(xedd, 0);
@@ -1625,6 +1623,7 @@ int create_tc(IMG img)
                 // Add profiling instructions to count each BBL exec at runtime:
                 //
                 indirect_profiled = false;
+                base_reg2 = XED_REG_INVALID;
                 if (KnobApplyThreadedCommit) {
                   if (isInsTerminatesBBL) {
                     rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled, base_reg2);
@@ -1647,12 +1646,12 @@ int create_tc(IMG img)
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
                 }
-
+                
+                
                 if (isInsTerminatesBBL) {
                   bbl_map[bbl_num].terminating_ins_entry = num_of_instr_map_entries - 1;
                   bbl_num++;
                   was_profiled = false;
-                  base_reg2 = XED_REG_INVALID;
                   bbl_map[bbl_num].starting_ins_entry = num_of_instr_map_entries;
                 }
 
