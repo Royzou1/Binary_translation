@@ -107,6 +107,9 @@ KNOB<BOOL> KnobProbeBackwardJumps(KNOB_MODE_WRITEONCE,    "pintool",
 KNOB<BOOL>   KnobNoReorderCode(KNOB_MODE_WRITEONCE,    "pintool",
     "no_code_reorder", "0", "Do not reorder code in TC2 (relevant only with -create_tc2 flag)");
 
+KNOB<UINT> KnobProfileThreshold(KNOB_MODE_WRITEONCE,    "pintool",
+                                  "prof_threshold", "95", "Profile percentage threshold");
+
 
 /* ===================================================================== */
 /* Global Variables */
