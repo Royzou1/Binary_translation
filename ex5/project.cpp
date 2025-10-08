@@ -1785,7 +1785,7 @@ void create_tc2_thread_func(void *v)
         //de-virtualization
       
         INS ins = instr_map[i].ins;
-        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins) &&  !INS_IsIpRelRead(ins) {
+        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins) &&  !INS_IsIpRelRead(ins)) {
 
       
           
