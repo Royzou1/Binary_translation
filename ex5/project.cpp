@@ -1800,6 +1800,13 @@ void create_tc2_thread_func(void *v)
               static uint64_t rax_mem = 0;
 
               // Save RAX - MOV RAX into rax_mem
+              if (instr_map[i -11].ins_type == ProfilingIns &&
+                  instr_map[i -11].size == 0) {
+                  cerr << "can be edited" <<endl;
+              }
+              else {
+                cerr << "bigtime error" <<endl;
+              }
               cerr << "editing tc2" <<endl;
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                 xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
@@ -1807,7 +1814,7 @@ void create_tc2_thread_func(void *v)
               set_encode_and_size(&enc_instr, 
                                   instr_map[i-11].encoded_ins,
                                   &(instr_map[i-11].size));
-              cerr << "enc ins: " << instr_map[i-11].encoded_ins << "size: "<< instr_map[i-11].size <<endl;
+              cerr << "enc ins: " << instr_map[i-11].encoded_ins << " size: "<< instr_map[i-11].size <<endl;
 
             }
             
