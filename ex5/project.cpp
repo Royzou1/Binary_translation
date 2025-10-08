@@ -1807,6 +1807,7 @@ void create_tc2_thread_func(void *v)
               set_encode_and_size(&enc_instr, 
                                   instr_map[i-11].encoded_ins,
                                   &(instr_map[i-11].size));
+              cerr << instr_map[i-11].encoded_ins << instr_map[i-11].size <<endl;
 
             }
             
