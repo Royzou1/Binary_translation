@@ -1805,7 +1805,10 @@ void create_tc2_thread_func(void *v)
                   cerr << "can be edited" <<endl;
               }
               else {
-                cerr << "bigtime error: i is: " << i <<endl;
+                cerr << "bigtime error" <<endl;
+                cerr << " i is: " << i << endl;
+                cerr << "type is: " <<instr_map[i -11].ins_type << endl;
+                cerr << "size is: " << instr_map[i -11].size << endl;
               }
               cerr << "editing tc2" <<endl;
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
