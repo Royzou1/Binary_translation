@@ -785,7 +785,7 @@ bool is_rip_relative_indirect(INS ins) {
     unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
     if (!memops) return false;
     if (xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RIP) {
-      cerr << "fun to be rip" << end ;
+      cerr << "fun to be rip" << endl;
       return true;
     }
     return false;
