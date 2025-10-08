@@ -1948,9 +1948,9 @@ void create_tc2_thread_func(void *v)
             //compare rax target_reg
             
             // Restore RAX - MOV from rax_mem into RAX
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX), // Destination reg op.
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+            //xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+            //  xed_reg(XED_REG_RAX), // Destination reg op.
+            //  xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
 
             //jne :Lable
 
