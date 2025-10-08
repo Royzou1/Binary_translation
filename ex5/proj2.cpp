@@ -1071,25 +1071,14 @@ int add_profiling_instrs_short(INS ins,
     xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
     if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
 
-    const bool no_scratch =
-        (killed_reg_pin == REG_INVALID() || REG_FullRegName(killed_reg_pin) == REG_RAX);
 
-    // --- Save RAX ---
-    if (no_scratch) {
-        // MOV [abs &rax_mem], RAX
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-                  xed_reg(XED_REG_RAX));
-        if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
-    } else {
-        cerr << "found dead reg inserting counters" << endl;
-        // MOV killed_reg, RAX
-        if (killed_reg_pin == REG_INVALID()) return -1; // defensive
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)),
-                  xed_reg(XED_REG_RAX));
-        if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
-    }
+
+    // MOV killed_reg, RAX
+    if (killed_reg_pin == REG_INVALID()) return -1; // defensive
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)),
+              xed_reg(XED_REG_RAX));
+    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
 
     // --- RAX = *counter_addr ---
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
@@ -1111,19 +1100,12 @@ int add_profiling_instrs_short(INS ins,
     if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
 
     // --- Restore RAX ---
-    if (no_scratch) {
-        // MOV RAX, [abs &rax_mem]
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(XED_REG_RAX),
-                  xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-        if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
-    } else {
-        // MOV RAX, killed_reg
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(XED_REG_RAX),
-                  xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)));
-        if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
-    }
+    // MOV RAX, killed_reg
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX),
+              xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)));
+    if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
+
   return 0;
 }
 
