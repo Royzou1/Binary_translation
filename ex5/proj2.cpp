@@ -1828,8 +1828,10 @@ void create_tc2_thread_func(void *v)
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {   
       if (instr_map[i].indirect_profiled){
         cerr << "i = " << i << " indirect cmd" << endl;
-        if (i < 11)
+        if (i < 11){
           cerr << "i is too small" << endl;
+          exit(1);
+        }
         else {
           for (int j = 1; j <=11; j++) {
             if (instr_map[i-j].ins_type != ProfilingIns) {
