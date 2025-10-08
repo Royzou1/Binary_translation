@@ -1824,7 +1824,12 @@ void create_tc2_thread_func(void *v)
 
     // Step 2.1: Modify instr_map to be used for TC2.
     //
-    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {    
+    
+    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {   
+      if (instr_map[i].ins_type ==ProfilingIns)
+        cerr << "i = " << i << " Profiiling" << endl;
+      if (instr_map[i].indirect_profiled)
+        cerr << "i = " << i << " indirect cmd" << endl;
        // Set new_ins_addr to be the orig_ins_addr.
        instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
                         
