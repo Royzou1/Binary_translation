@@ -1885,7 +1885,9 @@ void create_tc2_thread_func(void *v)
 
 
       /*****************de virtualtion *************************************/
-    
+      if (instr_map[i].indirect_profiled && instr_map[i].is_rip) {
+        cerr << "rip rip rip!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" <<endl;
+      }
       if (instr_map[i].indirect_profiled && !instr_map[i].is_rip) {
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0; 
