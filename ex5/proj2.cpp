@@ -1638,7 +1638,7 @@ int create_tc(IMG img)
                 indirect_profiled = false;
                 if (KnobApplyThreadedCommit) {
                   if (isInsTerminatesBBL) {
-                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, &indirect_profiled);
+                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled);
                     if (rc < 0)
                       return -1;
                   }
