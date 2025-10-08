@@ -1794,6 +1794,7 @@ void create_tc2_thread_func(void *v)
           }
         }
         if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins) && !rip_flag) {
+          
           bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
           int index = 0; 
           int total_jumps_counter = 0;
