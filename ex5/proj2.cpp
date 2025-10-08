@@ -158,6 +158,7 @@ typedef struct {
     int targ_map_entry;
     unsigned bbl_num;
     xed_category_enum_t xed_category;
+    bool indirect_profiled;
 } instr_map_t;
 
 
@@ -679,7 +680,7 @@ int disable_profiling_in_tc(instr_map_t * instr_map, unsigned num_of_instr_map_e
 /*************************/
 /* add_new_instr_entry() */
 /*************************/
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type)
+int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, bool indirect_profiled)
 {
     // copy orig instr to instr map:
     ADDRINT orig_targ_addr = 0x0;
@@ -715,7 +716,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_typ
     instr_map[num_of_instr_map_entries].ins_type = ins_type;
     instr_map[num_of_instr_map_entries].bbl_num = bbl_num;
     instr_map[num_of_instr_map_entries].xed_category = xed_decoded_inst_get_category(xedd);
-
+    instr_map[num_of_instr_map_entries].indirect_profiled = indirect_profiled;
     num_of_instr_map_entries++;
 
     if (num_of_instr_map_entries >= max_ins_count) {
@@ -766,7 +767,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
         cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
         return -1;;
     }
-    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns);
+    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false);
     if (rc < 0) {
       cerr << "ERROR: failed during instructon translation." << endl;
       return -1;
@@ -778,11 +779,20 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
 /**************************/
 /* add_profiling_instrs() */
 /**************************/
-int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsigned bbl_num)
+int add_profiling_instrs( INS ins, 
+                          ADDRINT ins_addr, 
+                          UINT64 *counter_addr, 
+                          unsigned bbl_num, 
+                          bool was_profiled
+                          bool &indirect_profiled)
 {
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
-
+  bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
+  if (!is_indirect && was_profiled) {
+    cerr << "skipped by using short" <<endl;
+    return 0;
+  }
   // Add NOP instr (to be overwritten later on by a jmp that skips
   // the profiling, once profiling is done).
   xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
@@ -797,7 +807,8 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
     return -1;
 
   // Create profiling for indirect jump targets.
-  if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+  if (is_indirect) {
+    *indirect_profiled = true;
     // Debug print.
     //cerr << " BBL terminates with indirect jump: "
     //     << " 0x" << hex << ins_addr << ": "
@@ -1010,27 +1021,28 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
   
   // Create the profiling instrs for counting the BBL frequency.
   //
+  if (!was_profiled) {
+    // MOV from bbl_map into RAX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX),  // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
+    if (add_prof_instr(ins_addr, &enc_instr) < 0)
+      return -1;
 
-  // MOV from bbl_map into RAX
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-            xed_reg(XED_REG_RAX),  // Destination reg op.
-            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0)
-    return -1;
+    // LEA RAX, [RAX+1]
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA,  64,  // operand width
+              xed_reg(XED_REG_RAX), // Destination reg op.
+              xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+    if (add_prof_instr(ins_addr, &enc_instr) < 0)
+      return -1;
 
-  // LEA RAX, [RAX+1]
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA,  64,  // operand width
-            xed_reg(XED_REG_RAX), // Destination reg op.
-            xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0)
-    return -1;
-
-  // MOV from RAX into bbl_map
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64), // Destination op.
-            xed_reg(XED_REG_RAX));
-  if (add_prof_instr(ins_addr, &enc_instr) < 0)
-    return -1;
+    // MOV from RAX into bbl_map
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64), // Destination op.
+              xed_reg(XED_REG_RAX));
+    if (add_prof_instr(ins_addr, &enc_instr) < 0)
+      return -1;
+  }
 
   // Restore RAX - MOV from rax_mem into RAX
   xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
@@ -1045,9 +1057,13 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
 /**************************/
 /* add_profiling_instrs_short() */
 /**************************/
-int add_profiling_instrs_short(INS ins, ADDRINT ins_addr, UINT64 *counter_addr,
-                               unsigned bbl_num, REG killed_reg_pin)
+int add_profiling_instrs_short(INS ins, 
+                              ADDRINT ins_addr, 
+                              UINT64 *counter_addr,
+                              unsigned bbl_num, 
+                              REG killed_reg_pin)
 {
+    cerr << "short route" <<endl;
     xed_encoder_instruction_t enc_instr;
     static uint64_t rax_mem = 0;
 
@@ -1536,6 +1552,9 @@ int create_tc(IMG img)
                }
             }
 
+            bool was_profiled = false;
+            bool *indirect_profiled = false;
+
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
                 //debug print of orig instruction:
@@ -1585,7 +1604,7 @@ int create_tc(IMG img)
                       cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
                       return -1;;
                   }
-                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type);
+                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false);
                   if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1601,15 +1620,25 @@ int create_tc(IMG img)
                 bool isInsTerminatesBBL = (isJumpOrRet(ins) || isNextInsJumpTarget);
 
                 REG killed_reg = getKilledRegByIns(ins);
-
-                const bool no_scratch = (killed_reg_pin == REG_INVALID() || 
-                                        killed_reg_pin == REG_RAX);
+                bool found_reg = (killed_reg_pin != REG_INVALID() && 
+                                        killed_reg_pin != REG_RAX);
+                // short Add profiling instructions to count each BBL exec at runtime:
+                //
+                if (KnobApplyThreadedCommit) {
+                  if (found_reg) {
+                    rc = add_profiling_instrs_short(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, killed_reg);
+                    if (rc < 0)
+                      return -1;
+                    was_profiled = true;
+                  }
+                }
                                         
                 // Add profiling instructions to count each BBL exec at runtime:
                 //
+                *indirect_profiled = false;
                 if (KnobApplyThreadedCommit) {
                   if (isInsTerminatesBBL) {
-                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num);
+                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled);
                     if (rc < 0)
                       return -1;
                   }
@@ -1624,7 +1653,7 @@ int create_tc(IMG img)
                     return -1;
                 }
 
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, *indirect_profiled);
                 if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1633,6 +1662,7 @@ int create_tc(IMG img)
                 if (isInsTerminatesBBL) {
                   bbl_map[bbl_num].terminating_ins_entry = num_of_instr_map_entries - 1;
                   bbl_num++;
+                  was_profiled = false;
                   bbl_map[bbl_num].starting_ins_entry = num_of_instr_map_entries;
                 }
 
