@@ -162,6 +162,7 @@ typedef struct {
     unsigned bbl_num;
     xed_category_enum_t xed_category;
     bool indirect_profiled;
+    bool is_rip;
 } instr_map_t;
 
 
@@ -683,7 +684,7 @@ int disable_profiling_in_tc(instr_map_t * instr_map, unsigned num_of_instr_map_e
 /*************************/
 /* add_new_instr_entry() */
 /*************************/
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, bool indirect_profiled)
+int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, bool indirect_profiled, bool is_rip)
 {
     // copy orig instr to instr map:
     ADDRINT orig_targ_addr = 0x0;
@@ -720,6 +721,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_typ
     instr_map[num_of_instr_map_entries].bbl_num = bbl_num;
     instr_map[num_of_instr_map_entries].xed_category = xed_decoded_inst_get_category(xedd);
     instr_map[num_of_instr_map_entries].indirect_profiled = indirect_profiled;
+    instr_map[num_of_instr_map_entries].is_rip = is_rip;
     num_of_instr_map_entries++;
 
     if (num_of_instr_map_entries >= max_ins_count) {
@@ -770,7 +772,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
         cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
         return -1;;
     }
-    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false);
+    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false , false);
     if (rc < 0) {
       cerr << "ERROR: failed during instructon translation." << endl;
       return -1;
@@ -778,6 +780,12 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
     return 0;
 }
 
+bool is_rip_relative_indirect(INS ins) {
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
+    if (!memops) return false;
+    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RIP;
+}
 
 /**************************/
 /* add_profiling_instrs() */
@@ -787,7 +795,8 @@ int add_profiling_instrs( INS ins,
                           UINT64 *counter_addr, 
                           unsigned bbl_num, 
                           bool was_profiled,
-                          bool &indirect_profiled)
+                          bool &indirect_profiled
+                          bool &is_rip)
 {
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
@@ -796,6 +805,7 @@ int add_profiling_instrs( INS ins,
     //cerr << "skipped by using short" <<endl;
     return 0;
   }
+  is_rip = is_rip_relative_indirect(ins);
   // Add NOP instr (to be overwritten later on by a jmp that skips
   // the profiling, once profiling is done).
   xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
@@ -1536,6 +1546,7 @@ int create_tc(IMG img)
 
             bool was_profiled = false;
             bool indirect_profiled = false;
+            bool is_rip = false;
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
@@ -1586,7 +1597,7 @@ int create_tc(IMG img)
                       cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
                       return -1;;
                   }
-                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false);
+                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false, false);
                   if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1619,7 +1630,7 @@ int create_tc(IMG img)
                 indirect_profiled = false;
                 if (KnobApplyThreadedCommit) {
                   if (isInsTerminatesBBL) {
-                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled);
+                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled, is_rip);
                     if (rc < 0)
                       return -1;
                   }
@@ -1634,7 +1645,7 @@ int create_tc(IMG img)
                     return -1;
                 }
 
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, indirect_profiled);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, indirect_profiled, is_rip);
                 if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1644,6 +1655,7 @@ int create_tc(IMG img)
                   bbl_map[bbl_num].terminating_ins_entry = num_of_instr_map_entries - 1;
                   bbl_num++;
                   was_profiled = false;
+                  is_rip = false;
                   bbl_map[bbl_num].starting_ins_entry = num_of_instr_map_entries;
                 }
 
@@ -1874,7 +1886,7 @@ void create_tc2_thread_func(void *v)
 
       /*****************de virtualtion *************************************/
     
-      if (instr_map[i].indirect_profiled) {
+      if (instr_map[i].indirect_profiled && !instr_map[i].is_rip) {
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0; 
         int total_jumps_counter = 0;
@@ -1883,10 +1895,15 @@ void create_tc2_thread_func(void *v)
           total_jumps_counter += curr_bbl.targ_count[j];
           }
           
-          if (total_jumps_counter == 0) continue;
+          if (total_jumps_counter == 0) {
+            cerr << "zero jump were collected " << endl;
+            continue;
+          }
           if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
                 cerr << "hello from the other side!!!!!!!!!!!!!!!!" << endl;
-
+          }
+          else{
+              cerr << "not dominent jump" << endl;
           }
       }
       /*********************************************************************/
