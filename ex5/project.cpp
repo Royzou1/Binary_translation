@@ -1831,7 +1831,30 @@ bool is_jump_reg_not_rax_rip(INS ins) {
     return true;
 }
 
+int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
+                        char* encode_ins, 
+                        unsigned int * size)
+{
+  unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
 
+  // Convert the encoding instr to a valid encoder request.
+  xed_encoder_request_t enc_req;    
+  xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+  xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, enc_instr);
+  if (!convert_ok) {
+      cerr << "conversion to encode request failed" << endl;
+      return -1;
+  }
+
+  // Encode instr.
+  xed_error_enum_t xed_error = xed_encode(&enc_req,
+            reinterpret_cast<UINT8*>(encode_ins), ilen, size);
+  if (xed_error != XED_ERROR_NONE) {
+      cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+    return -1;
+  }
+  return 0;
+}
 
 /****************************/
 /* create_tc2_thread_func() */
