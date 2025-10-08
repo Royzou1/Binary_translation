@@ -1553,7 +1553,7 @@ int create_tc(IMG img)
             }
 
             bool was_profiled = false;
-            bool *indirect_profiled = false;
+            bool indirect_profiled = false;
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
@@ -1635,10 +1635,10 @@ int create_tc(IMG img)
                                         
                 // Add profiling instructions to count each BBL exec at runtime:
                 //
-                *indirect_profiled = false;
+                indirect_profiled = false;
                 if (KnobApplyThreadedCommit) {
                   if (isInsTerminatesBBL) {
-                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled);
+                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, &indirect_profiled);
                     if (rc < 0)
                       return -1;
                   }
@@ -1653,7 +1653,7 @@ int create_tc(IMG img)
                     return -1;
                 }
 
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, *indirect_profiled);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, indirect_profiled);
                 if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
@@ -1671,7 +1671,7 @@ int create_tc(IMG img)
                 //     immediately after the cond branch which terminates the bbl.
                 //     and before the next BBL.
                 if (KnobApplyThreadedCommit && INS_Category(ins) == XED_CATEGORY_COND_BR) {
-                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1);
+                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1, was_profiled, indirect_profiled);
                   if (rc < 0)
                     return -1;
                 }
