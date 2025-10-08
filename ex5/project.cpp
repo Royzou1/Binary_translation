@@ -1807,7 +1807,10 @@ void create_tc2_thread_func(void *v)
               }
               else {
                 cerr << "bigtime error" <<endl;
-                cerr << "ins is:" << ins << endl;
+                cerr << std::hex << INS_Address(ins) << ": "
+                    << INS_Disassemble(ins)
+                    << "  (size=" << std::dec << INS_Size(ins) << ")"
+                    << endl;
                 cerr << " i - 11 is: " << i - 11 << endl;
                 cerr << "type is: " <<instr_map[i -11].ins_type << endl;
                 cerr << "size is: " << instr_map[i -11].size << endl;
