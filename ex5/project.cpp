@@ -1906,18 +1906,19 @@ void create_tc2_thread_func(void *v)
       /*****************de virtualtion *************************************/
       
       
-      if (instr_map[i].indirect_profiled){
-        if(is_RAX(instr_map[i].ins) )
+      if (instr_map[i].indirect_profiled) {
+        if(is_RAX(instr_map[i].ins) ) {
         	cerr << "RAX !!!!!!!!!!!!!!!!!!!!!"<< endl;
         	ra++;
-        else if (is_invalid(instr_map[i].ins)  )
+        }
+        else if (is_invalid(instr_map[i].ins)  ) {
         	cerr << "INVALID !!!!!!!!!!!!!!!!!!!!!"<< endl;
         	in++;
-        
-        else if (is_rip(instr_map[i].ins) ) 
+        }
+        else if (is_rip(instr_map[i].ins) ) {
         	cerr << "RIP !!!!!!!!!!!!!!!!!!!!!"<< endl;
         	ri++;
-        else {
+        }else {
           ot++;
         }
       }
