@@ -1121,7 +1121,7 @@ int add_profiling_instrs_short(INS ins,
         // MOV RAX, killed_reg
         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                   xed_reg(XED_REG_RAX),
-                  xed_reg(INS_XedExactMapFromPinReg(killed_reg)));
+                  xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)));
         if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
     }
   return 0;
