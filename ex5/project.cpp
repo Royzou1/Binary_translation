@@ -1786,6 +1786,7 @@ void create_tc2_thread_func(void *v)
       
         INS ins = instr_map[i].ins;
         if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+          
           bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
           int index = 0; 
           int total_jumps_counter = 0;
@@ -1806,7 +1807,8 @@ void create_tc2_thread_func(void *v)
               }
               else {
                 cerr << "bigtime error" <<endl;
-                cerr << " i is: " << i << endl;
+                cerr << "ins is:" << ins << endl;
+                cerr << " i - 11 is: " << i - 11 << endl;
                 cerr << "type is: " <<instr_map[i -11].ins_type << endl;
                 cerr << "size is: " << instr_map[i -11].size << endl;
               }
