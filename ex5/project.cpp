@@ -1841,9 +1841,6 @@ bool is_invalid(INS ins) {
 }
 
 bool is_jump_reg_not_rax_rip(INS ins) {
-    if (!INS_IsIndirectBranchOrCall(ins))
-        return false;
-
     xed_decoded_inst_t* xedd = INS_XedDec(ins);
     xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
 
