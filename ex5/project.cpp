@@ -1818,8 +1818,14 @@ int commit_translated_rtns_to_tc2()
 
 
 bool is_RAX(INS ins) {
-    xed_decoded_inst_t* xedd = INS_XedDec(ins);
-    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RAX;
+    for (UINT32 op = 0; op < INS_OperandCount(ins); ++op) {
+        if (INS_OperandIsReg(ins, op)) {
+            REG r = REG_FullRegName(INS_OperandReg(ins, op));
+            if (r == REG_RAX) return true;        // 64-bit
+            if (r == REG_EAX) return true;        // if you also handle 32-bit
+        }
+    }
+    return false;
 }
 
 
