@@ -1804,11 +1804,13 @@ int commit_translated_rtns_to_tc2()
        memcpy((char *)instr_map[i].orig_ins_addr, instr_map[i].encoded_ins, 4);
      
        //debug print:
+       /*
        cerr << " committing rtN from: 0x" << hex << instr_map[i].orig_ins_addr
             << " to: 0x" << hex << instr_map[i].new_ins_addr 
             << " size: " << olen
             << endl;
-       dump_instr_from_mem ((ADDRINT *)instr_map[i].orig_ins_addr, instr_map[i].orig_ins_addr);
+       */
+            dump_instr_from_mem ((ADDRINT *)instr_map[i].orig_ins_addr, instr_map[i].orig_ins_addr);
   }
   
   return 0;
