@@ -1832,8 +1832,10 @@ void create_tc2_thread_func(void *v)
           cerr << "i is too small" << endl;
         else {
           for (int j = 1; j <=11; j++) {
-            if (instr_map[i-j].ins_type != ProfilingIns)
+            if (instr_map[i-j].ins_type != ProfilingIns) {
               cerr <<"cmd " << i-j << " isnt profiiling" <<endl;
+              exit(1);
+            }
           }
         }
       }
