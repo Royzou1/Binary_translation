@@ -1603,7 +1603,7 @@ int create_tc(IMG img)
                 // short Add profiling instructions to count each BBL exec at runtime:
                 //
                 if (KnobApplyThreadedCommit) {
-                  if (found_reg) {
+                  if (found_reg && !was_profiled) {
                     rc = add_profiling_instrs_short(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, killed_reg);
                     if (rc < 0)
                       return -1;
