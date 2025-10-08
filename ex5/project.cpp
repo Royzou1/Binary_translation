@@ -1786,6 +1786,11 @@ void create_tc2_thread_func(void *v)
       
         INS ins = instr_map[i].ins;
         if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+
+           REG base = INS_OperandMemoryBaseReg(ins);
+            // ignore RIP-relative addressing
+            if (base == REG_RIP)
+                continue;
           
           bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
           int index = 0; 
