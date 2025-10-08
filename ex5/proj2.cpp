@@ -162,7 +162,7 @@ typedef struct {
     unsigned bbl_num;
     xed_category_enum_t xed_category;
     bool indirect_profiled;
-    xed_reg_enum_t &base_reg2;
+    xed_reg_enum_t base_reg2;
 } instr_map_t;
 
 
