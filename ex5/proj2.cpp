@@ -1618,8 +1618,7 @@ int create_tc(IMG img)
                 bool isInsTerminatesBBL = (isJumpOrRet(ins) || isNextInsJumpTarget);
 
                 REG killed_reg = getKilledRegByIns(ins);
-                bool found_reg = (killed_reg != REG_INVALID() && 
-                                  INS_RegRContain(ins, killed_reg) == false);
+                bool found_reg = !(killed_reg_pin == REG_INVALID() || REG_FullRegName(killed_reg_pin) == REG_RAX);
                 // short Add profiling instructions to count each BBL exec at runtime:
                 //
                 if (KnobApplyThreadedCommit) {
