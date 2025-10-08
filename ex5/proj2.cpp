@@ -808,7 +808,7 @@ int add_profiling_instrs( INS ins,
 
   // Create profiling for indirect jump targets.
   if (is_indirect) {
-    *indirect_profiled = true;
+    indirect_profiled = true;
     // Debug print.
     //cerr << " BBL terminates with indirect jump: "
     //     << " 0x" << hex << ins_addr << ": "
@@ -1084,9 +1084,10 @@ int add_profiling_instrs_short(INS ins,
     } else {
         cerr << "found dead reg inserting counters" << endl;
         // MOV killed_reg, RAX
-        if (killed_reg_pin == XED_REG_INVALID) return -1; // defensive
+        xed_reg_enum_t killed_xed = XedFromPin64(killed_reg_pin);
+        if (killed_xed == XED_REG_INVALID) return -1; // defensive
         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(killed_reg_pin),
+                  xed_reg(killed_xed),
                   xed_reg(XED_REG_RAX));
         if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
     }
@@ -1119,10 +1120,10 @@ int add_profiling_instrs_short(INS ins,
         if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
     } else {
         // MOV RAX, killed_reg
-        xed_reg_enum_t killed_reg_pin = XedFromPin64(killed_reg_pin);
+        xed_reg_enum_t killed_xed = XedFromPin64(killed_reg_pin);
         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                   xed_reg(XED_REG_RAX),
-                  xed_reg(killed_reg_pin));
+                  xed_reg(killed_xed));
         if (add_prof_instr(ins_addr, &enc_instr) < 0) return -1;
     }
   return 0;
