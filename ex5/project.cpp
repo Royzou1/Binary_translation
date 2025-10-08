@@ -1714,6 +1714,30 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
+int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
+                        char* encode_ins, 
+                        unsigned int * size)
+{
+  unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
+
+  // Convert the encoding instr to a valid encoder request.
+  xed_encoder_request_t enc_req;    
+  xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+  xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, enc_instr);
+  if (!convert_ok) {
+      cerr << "conversion to encode request failed" << endl;
+      return -1;
+  }
+  
+  // Encode instr.
+  xed_error_enum_t xed_error = xed_encode(&enc_req,
+            reinterpret_cast<UINT8*>(encode_ins), ilen, size);
+  if (xed_error != XED_ERROR_NONE) {
+      cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
+    return -1;
+  }
+  return 0;
+}
 
 /****************************/
 /* create_tc2_thread_func() */
@@ -1758,23 +1782,23 @@ void create_tc2_thread_func(void *v)
          instr_map[i].orig_targ_addr = new_targ_addr;
        }
        
-       //de-virtualization
+        //de-virtualization
       
-       INS ins = instr_map[i].ins;
-       if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
-		bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
-            	int index = 0; 
-               int total_jumps_counter = 0;
-            	for (int i = 0 ; i <= MAX_TARG_ADDRS ; i++) {
-               	 index = (curr_bbl.targ_count[i] > curr_bbl.targ_count[index]) ? i : index;
-               	 total_jumps_counter += curr_bbl.targ_count[i];
-                }
-                
-                if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-                	//
-                }
-       
-       }
+        INS ins = instr_map[i].ins;
+        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+          bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
+          int index = 0; 
+          int total_jumps_counter = 0;
+          for (int i = 0 ; i <= MAX_TARG_ADDRS ; i++) {
+            index = (curr_bbl.targ_count[i] > curr_bbl.targ_count[index]) ? i : index;
+            total_jumps_counter += curr_bbl.targ_count[i];
+            }
+            
+            if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
+              //
+            }
+            
+        }
        
        
        
