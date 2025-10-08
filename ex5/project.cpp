@@ -1928,7 +1928,7 @@ void create_tc2_thread_func(void *v)
         if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
           // jump reg | (reg != rax)
           if (is_jump_reg_not_rax_rip(instr_map[i].ins)) {
-            xed_decoded_inst_t* xedd = INS_XedDec(ins);
+            xed_decoded_inst_t* xedd = INS_XedDec(instr_map[i].ins);
             xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
           
             xed_encoder_instruction_t enc_instr;
