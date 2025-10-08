@@ -1915,7 +1915,7 @@ void create_tc2_thread_func(void *v)
       if (instr_map[i].indirect_profiled) {
         xed_decoded_inst_t *xedd = INS_XedDec(instr_map[i].ins);
         xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-        cerr << targ_reg << endl;
+        cerr << xed_reg_enum_t2str(targ_reg) << endl;
         if(is_RAX(instr_map[i].ins) ) {
         	cerr << "RAX !!!!!!!!!!!!!!!!!!!!!"<< endl;
         	ra++;
