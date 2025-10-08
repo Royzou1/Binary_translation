@@ -1816,30 +1816,6 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
-
-bool is_RAX(INS ins) {
-    for (UINT32 op = 0; op < INS_OperandCount(ins); ++op) {
-        if (INS_OperandIsReg(ins, op)) {
-            REG r = REG_FullRegName(INS_OperandReg(ins, op));
-            if (r == REG_RAX) return true;        // 64-bit
-            if (r == REG_EAX) return true;        // if you also handle 32-bit
-        }
-    }
-    return false;
-}
-
-
-bool is_rip(INS ins) {
-    xed_decoded_inst_t* xedd = INS_XedDec(ins);
-    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RIP;
-}
-
-
-bool is_invalid(INS ins) {
-    xed_decoded_inst_t* xedd = INS_XedDec(ins);
-    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_INVALID;
-}
-
 bool is_jump_reg_not_rax_rip(INS ins) {
     xed_decoded_inst_t* xedd = INS_XedDec(ins);
     xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
@@ -1937,18 +1913,50 @@ void create_tc2_thread_func(void *v)
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0; 
         int total_jumps_counter = 0;
+        
+        
         for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
         }
+
         if (total_jumps_counter == 0) {
           cerr << "zero jump were collected " << endl;
           continue;
         }
+
         if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
           // jump reg | (reg != rax)
           if (is_jump_reg_not_rax_rip(instr_map[i].ins)) {
+            xed_decoded_inst_t* xedd = INS_XedDec(ins);
+            xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
+          
+            xed_encoder_instruction_t enc_instr;
+            static uint64_t rax_mem = 0;
 
+            // Save RAX - MOV RAX into rax_mem
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
+              xed_reg(XED_REG_RAX));
+
+            set_encode_and_size(&enc_instr, 
+                                (instr_map[i-6].encoded_ins), 
+                                &(instr_map[i-6].size));
+
+            //load hottest_og rax
+
+            //compare rax target_reg
+            
+            // Restore RAX - MOV from rax_mem into RAX
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX), // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+
+            //jne :Lable
+
+            //load hottetst_tc2 to targ_reg
+
+            //Lable :
           }
           
         }
