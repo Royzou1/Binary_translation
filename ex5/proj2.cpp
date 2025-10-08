@@ -162,7 +162,7 @@ typedef struct {
     unsigned bbl_num;
     xed_category_enum_t xed_category;
     bool indirect_profiled;
-    xed_reg_enum_t &base_reg2
+    xed_reg_enum_t &base_reg2;
 } instr_map_t;
 
 
@@ -772,7 +772,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr) {
         cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
         return -1;;
     }
-    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false , false);
+    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false , XED_REG_INVALID);
     if (rc < 0) {
       cerr << "ERROR: failed during instructon translation." << endl;
       return -1;
@@ -1594,7 +1594,7 @@ int create_tc(IMG img)
                       cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
                       return -1;;
                   }
-                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false, false);
+                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false, XED_REG_INVALID);
                   if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
