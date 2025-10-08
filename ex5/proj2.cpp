@@ -790,7 +790,7 @@ int add_profiling_instrs( INS ins,
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
   if (!is_indirect && was_profiled) {
-    //cerr << "skipped by using short" <<endl;
+    cerr << "skipped by using short" <<endl;
     return 0;
   }
   // Add NOP instr (to be overwritten later on by a jmp that skips
@@ -1063,7 +1063,7 @@ int add_profiling_instrs_short(INS ins,
                               unsigned bbl_num, 
                               REG killed_reg_pin)
 {
-    //cerr << "short route" <<endl;
+    cerr << "short route" <<endl;
     xed_encoder_instruction_t enc_instr;
 
     // 4-byte NOP placeholder for later patching
