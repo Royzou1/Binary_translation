@@ -1884,7 +1884,8 @@ void create_tc2_thread_func(void *v)
           if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
                 cerr << "hello from the other side!!!!!!!!!!!!!!!!" << endl;
 
-
+          }
+      }
       /*********************************************************************/
     }
     
