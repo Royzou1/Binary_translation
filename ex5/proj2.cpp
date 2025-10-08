@@ -1883,7 +1883,7 @@ void create_tc2_thread_func(void *v)
 
       /*****************de virtualtion *************************************/
       bool not_valid_reg =  (instr_map[i].base_reg2 == XED_REG_INVALID) ||
-                            (instr_map[i].base_reg2 == XED_REG_RIP)  
+                            (instr_map[i].base_reg2 == XED_REG_RIP);
       if (instr_map[i].indirect_profiled && !not_valid_reg) {
         cerr << "Reg: " << instr_map[i].base_reg2 << endl;
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
