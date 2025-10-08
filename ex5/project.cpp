@@ -106,9 +106,9 @@ KNOB<BOOL> KnobProbeBackwardJumps(KNOB_MODE_WRITEONCE,    "pintool",
 
 KNOB<BOOL>   KnobNoReorderCode(KNOB_MODE_WRITEONCE,    "pintool",
     "no_code_reorder", "0", "Do not reorder code in TC2 (relevant only with -create_tc2 flag)");
-    
+
 KNOB<UINT> KnobProfileThreshold(KNOB_MODE_WRITEONCE,    "pintool",
-                                     "prof_threshold", "95", "Profile percentage threshold");
+                                  "prof_threshold", "95", "Profile percentage threshold");
 
 
 /* ===================================================================== */
@@ -161,7 +161,8 @@ typedef struct {
     int targ_map_entry;
     unsigned bbl_num;
     xed_category_enum_t xed_category;
-    INS ins; //added for de-virt
+    bool indirect_profiled;
+    INS ins;
 } instr_map_t;
 
 
@@ -683,7 +684,7 @@ int disable_profiling_in_tc(instr_map_t * instr_map, unsigned num_of_instr_map_e
 /*************************/
 /* add_new_instr_entry() */
 /*************************/
-int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, INS ins)
+int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_type, bool indirect_profiled, INS ins)
 {
     // copy orig instr to instr map:
     ADDRINT orig_targ_addr = 0x0;
@@ -719,9 +720,8 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, ins_enum_t ins_typ
     instr_map[num_of_instr_map_entries].ins_type = ins_type;
     instr_map[num_of_instr_map_entries].bbl_num = bbl_num;
     instr_map[num_of_instr_map_entries].xed_category = xed_decoded_inst_get_category(xedd);
-    //for the virtualization
+    instr_map[num_of_instr_map_entries].indirect_profiled = indirect_profiled;
     instr_map[num_of_instr_map_entries].ins = ins;
-
     num_of_instr_map_entries++;
 
     if (num_of_instr_map_entries >= max_ins_count) {
@@ -772,7 +772,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr, INS i
         cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
         return -1;;
     }
-    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, ins);
+    int rc = add_new_instr_entry(&xedd, ins_addr, ProfilingIns, false , ins);
     if (rc < 0) {
       cerr << "ERROR: failed during instructon translation." << endl;
       return -1;
@@ -784,10 +784,20 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr, INS i
 /**************************/
 /* add_profiling_instrs() */
 /**************************/
-int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsigned bbl_num, REG killed_reg)
+int add_profiling_instrs( INS ins, 
+                          ADDRINT ins_addr, 
+                          UINT64 *counter_addr, 
+                          unsigned bbl_num, 
+                          bool was_profiled,
+                          bool &indirect_profiled)
 {
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
+  bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
+  if (!is_indirect && was_profiled) {
+    //cerr << "skipped by using short" <<endl;
+    return 0;
+  }
 
   // Add NOP instr (to be overwritten later on by a jmp that skips
   // the profiling, once profiling is done).
@@ -795,30 +805,21 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
   if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
     return -1;
 
-  // Decide where to save RAX up-front so both the indirect-jump block
-  // and the final restore use the SAME source.
-  const bool save_to_killed_reg =
-      (killed_reg != REG_INVALID() && killed_reg != REG_RAX);
-
-  // ---- SAVE RAX (for temporary clobbers inside profiling sequence) ----
-  if (save_to_killed_reg) {
-    // MOV killed_reg, RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(INS_XedExactMapFromPinReg(killed_reg)),
-              xed_reg(XED_REG_RAX));
-  } else {
-    // Fallback: MOV [rax_mem], RAX
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
-              xed_reg(XED_REG_RAX));
-  }
+  // Save RAX - MOV RAX into rax_mem
+  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
+            xed_reg(XED_REG_RAX));
   if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
     return -1;
 
-  // -----------------------------
   // Create profiling for indirect jump targets.
-  // -----------------------------
-  if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
+  if (is_indirect) {
+    indirect_profiled = true;
+    // Debug print.
+    //cerr << " BBL terminates with indirect jump: "
+    //     << " 0x" << hex << ins_addr << ": "
+    //     << INS_Disassemble(ins) << "\n";
+
     static uint64_t rbx_mem = 0;
     static uint64_t rcx_mem = 0;
 
@@ -826,183 +827,289 @@ int add_profiling_instrs(INS ins, ADDRINT ins_addr, UINT64 *counter_addr, unsign
     xed_decoded_inst_t *xedd = INS_XedDec(ins);
     xed_reg_enum_t base_reg = xed_decoded_inst_get_base_reg(xedd, 0);
     xed_reg_enum_t index_reg = xed_decoded_inst_get_index_reg(xedd, 0);
-    xed_int64_t    disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
-    xed_uint_t     scale = xed_decoded_inst_get_scale(xedd, 0);
-    xed_uint_t     width = xed_decoded_inst_get_memory_displacement_width_bits(xedd, 0);
-    unsigned       mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd, 0);
-
+    xed_int64_t disp = xed_decoded_inst_get_memory_displacement(xedd, 0);
+    xed_uint_t scale = xed_decoded_inst_get_scale(xedd, 0);
+    xed_uint_t width = xed_decoded_inst_get_memory_displacement_width_bits(xedd, 0);
+    unsigned mem_addr_width = xed_decoded_inst_get_memop_address_width(xedd, 0);
+    
     xed_reg_enum_t targ_reg = XED_REG_INVALID;
     unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
     if (!memops)
       targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
 
-    // Save RBX via RAX (2 steps).
+    // Debug print.
+    //dump_instr_from_xedd(xedd, ins_addr);
+    //cerr << " base reg: " << xed_reg_enum_t2str(base_reg)
+    //     << " index reg " << xed_reg_enum_t2str(index_reg)
+    //     << " scale: " << dec << scale
+    //     << " disp: 0x" << hex << disp
+    //     << " width: " << dec << width
+    //     << " mem addr width: " << dec << mem_addr_width
+    //     << " targ reg: " << targ_reg << xed_reg_enum_t2str(targ_reg)
+    //     << "\n";
+    
+    // save RBX into rbx_mem in 2 steps via RAX
+    // save RCX into rcx_mem in 2 steps via RAX
+    // Convert jmp [base_reg + index_reg*scale] to: MOV RAX, [base_reg + index_reg*scale]
+    //         Or convert jmp targ_reg to: MOV RAX, targ_reg ==> RAX holds jump targ addr
+    // MOV RBX, RAX ==> Now RBX also holds targ addr
+    // AND RAX, MAX_TARG_ADDR ==> RAX holds index i = 0..MAX_TARG_ADDRS
+    // MOV RCX, xed_imm0((ADDRINT)&bbl_map_targ_addr[bbl_num][0])
+    // MOV [RCX + 8*RAX], RBX
+    // MOV RBX, xed_imm0((ADDRINT)&bbl_map_targ_count[bbl_num][0])
+    // MOV RCX, [RBX + 8*RAX]
+    // LEA RCX, [RCX + 1]
+    // MOV [RBX + 8*RAX], RCX
+    // restore RCX from rcx_mem in 2 steps via RAX
+    // restore RBX from rbx_mem in 2 steps via RAX
+
+    // Save RBX step 1 - MOV RBX into RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
+              xed_reg(XED_REG_RAX),  // Destination op.
               xed_reg(XED_REG_RBX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Save RBX step 2 - MOV RAX into rbx_mem
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64), // Destination op.
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // Save RCX via RAX (2 steps).
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Save RCX step 1 - MOV RCX into RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
+              xed_reg(XED_REG_RAX),   // Destination op.
               xed_reg(XED_REG_RCX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Save RCX step 2 - MOV RAX into rcx_mem
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64),
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64), // Destination op.
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // If the original jmp uses RAX (as base/index/target) we must restore the
-    // original RAX temporarily from the SAME place we saved it.
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Replace RIP reg by an absolute displacement.
+    // Convert 'jmp [rax*8+0x657118]' or: 'jmp [rip+0x42513c]'
+    // to: mov rax, [rax*8+0x657118] or: mov rax, [<absolute addr>]
+    //
+    // Check if we need to restore RAX in case  it is used as base reg or index reg,
+    // e.g., jmp [RIP+8*RAX] or: jmp [RAX+8*RBX]
+    
+    // Check if we need to restore RAX from rax_mem.
     if (targ_reg == XED_REG_RAX || base_reg == XED_REG_RAX || index_reg == XED_REG_RAX) {
-      if (save_to_killed_reg) {
-        // MOV RAX, killed_reg
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(XED_REG_RAX),
-                  xed_reg(INS_XedExactMapFromPinReg(killed_reg)));
-      } else {
-        // MOV RAX, [rax_mem]
-        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                  xed_reg(XED_REG_RAX),
-                  xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-      }
-      if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-    }
-
-    // Convert addressing to load the target into RAX.
-    if (base_reg == XED_REG_RIP) {
-      unsigned int orig_size = xed_decoded_inst_get_length(xedd);
-      xed_int64_t new_disp = ins_addr + disp + orig_size;
-      xed_int64_t new_disp_width = 32; // conservative max disp width
       xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(XED_REG_RAX),
-                xed_mem_bisd(XED_REG_INVALID, index_reg, scale,
+                xed_reg(XED_REG_RAX), // Destination reg op.
+                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+      if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+       return -1;
+    }
+    // Check if we need to convert [RIP+disp+index*scale] to [absolute_disp + index*scale]
+    if (base_reg == XED_REG_RIP) {
+      unsigned int orig_size = xed_decoded_inst_get_length (xedd);
+      // Modify rip displacement by an absolute displacement val.
+      xed_int64_t new_disp = ins_addr + disp + orig_size;
+      xed_int64_t new_disp_width = 32; // set maximal disp width for now.
+      xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_reg(XED_REG_RAX),    // Destination reg op.
+                xed_mem_bisd(XED_REG_INVALID, index_reg, scale, 
                              xed_disp(new_disp, new_disp_width),
                              mem_addr_width));
-    } else if (targ_reg != XED_REG_RAX) { // avoid MOV RAX,RAX
-      xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(XED_REG_RAX),
-                (targ_reg != XED_REG_INVALID ? xed_reg(targ_reg)
-                 : xed_mem_bisd(base_reg, index_reg, scale,
-                                xed_disp(disp, width), mem_addr_width)));
+    } else if (targ_reg != XED_REG_RAX) { // avoid ceating the MOV RAX, RAX Nop.
+        xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                 xed_reg(XED_REG_RAX),    // Destination reg op.
+                 (targ_reg != XED_REG_INVALID ? xed_reg(targ_reg) :
+                  xed_mem_bisd(base_reg, index_reg, scale, xed_disp(disp, width), mem_addr_width)));
     }
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // Copy target from RAX to RBX, then index & update tables via RCX/RBX.
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // MOV RBX, RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RBX),
+              xed_reg(XED_REG_RBX),    // Destination reg op.
               xed_reg(XED_REG_RAX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // AND RAX, MAX_TARG_ADDRS  (RFLAGS modified; ok)
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // AND RAX, MAX_TARG_ADDRS. (NOTE: Modifies RFLAGS).
     xed_inst2(&enc_instr, dstate, XED_ICLASS_AND, 64,
-              xed_reg(XED_REG_RAX),
-              xed_imm0(MAX_TARG_ADDRS, 8));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // MOV RCX, &bbl_map[bbl_num].targ_addr[0]
+              xed_reg(XED_REG_RAX),    // Destination reg op.
+              xed_imm0(MAX_TARG_ADDRS, 8));  // keep only MAX_TARG_ADDRS+1 targets for profiling.
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // MOV RCX, xed_imm0((ADDRINT)&bbl_map[bbl_num].targ_addr[0])
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RCX),
+              xed_reg(XED_REG_RCX), // Destination reg op.
               xed_imm0((ADDRINT)&(bbl_map[bbl_num].targ_addr[0]), 64));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
     // MOV [RCX + 8*RAX], RBX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bisd(XED_REG_RCX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
+              xed_mem_bisd(XED_REG_RCX, // base reg
+                           XED_REG_RAX, //index reg
+                           8, // scale
+                           xed_disp(0, 32), // disp
+                           64),  // Destination reg op.
               xed_reg(XED_REG_RBX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // MOV RBX, &bbl_map[bbl_num].targ_count[0]
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // MOV RBX, xed_imm0((ADDRINT)&bbl_map[bbl_num].targ_count[0])
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RBX),
+              xed_reg(XED_REG_RBX), // Destination reg op.
               xed_imm0((ADDRINT)&(bbl_map[bbl_num].targ_count[0]), 64));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
     // MOV RCX, [RBX + 8*RAX]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RCX),
-              xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+              xed_reg(XED_REG_RCX),   // Destination reg op.
+              xed_mem_bisd(XED_REG_RBX, // base reg
+                           XED_REG_RAX, //index reg
+                           8, // scale
+                           xed_disp(0, 32), // disp
+                           64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
     // LEA RCX, [RCX + 1]
     xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-              xed_reg(XED_REG_RCX),
-              xed_mem_bd(XED_REG_RCX, xed_disp(1, 8), 64));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
+              xed_reg(XED_REG_RCX), // Destination reg op.
+              xed_mem_bd(XED_REG_RCX, // base reg
+                         xed_disp(1, 8), // disp
+                         64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
     // MOV [RBX + 8*RAX], RCX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bisd(XED_REG_RBX, XED_REG_RAX, 8, xed_disp(0, 32), 64),
+              xed_mem_bisd(XED_REG_RBX, // base reg
+                           XED_REG_RAX, //index reg
+                           8, // scale
+                           xed_disp(0, 32), // disp
+                           64),     // Destination op.
               xed_reg(XED_REG_RCX));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-    // Restore RCX via RAX (2 steps).
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Restore RCX step 1- MOV from rcx_mem into RAX
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
+              xed_reg(XED_REG_RAX), // Destination op.
               xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rcx_mem, 64), 64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Restore RCX step 2 - MOV RAX into RCX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RCX),  // Destination op.
+              xed_reg(XED_REG_RAX));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Restore RBX step 1 - MOV from rbx_mem into RAX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX), // Destination op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+    
+    // Restore RBX step 2 - MOV RAX into RBX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RBX),  // Destination op.
+              xed_reg(XED_REG_RAX));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+  } // end of: 'if bbl terminates with indirect jump'.
+  
+  // Create the profiling instrs for counting the BBL frequency.
+  //
+  if (!was_profiled) {
+    // MOV from bbl_map into RAX
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX),  // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+
+    // LEA RAX, [RAX+1]
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA,  64,  // operand width
+              xed_reg(XED_REG_RAX), // Destination reg op.
+              xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+
+    // MOV from RAX into bbl_map
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64), // Destination op.
+              xed_reg(XED_REG_RAX));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+      return -1;
+  }
+
+  // Restore RAX - MOV from rax_mem into RAX
+  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+            xed_reg(XED_REG_RAX), // Destination reg op.
+            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0)
+    return -1;
+ 
+  return 0;
+}
+
+/**************************/
+/* add_profiling_instrs_short() */
+/**************************/
+int add_profiling_instrs_short(INS ins, 
+                              ADDRINT ins_addr, 
+                              UINT64 *counter_addr,
+                              unsigned bbl_num, 
+                              REG killed_reg_pin)
+{
+    //cerr << "short route" <<endl;
+    xed_encoder_instruction_t enc_instr;
+
+    // 4-byte NOP placeholder for later patching
+    xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
     if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
 
+
+
+    // MOV killed_reg, RAX
+    if (killed_reg_pin == REG_INVALID()) return -1; // defensive
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RCX),
+              xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)),
               xed_reg(XED_REG_RAX));
     if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
 
-    // Restore RBX via RAX (2 steps).
+    // --- RAX = *counter_addr ---
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
     if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
 
+    // --- RAX = RAX + 1 (LEA) ---
+    xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
+              xed_reg(XED_REG_RAX),
+              // [RAX + 1]  (disp=1, disp width 8 bits; mem operand width is address width)
+              xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
+    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
+
+    // --- *counter_addr = RAX ---
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RBX),
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64),
               xed_reg(XED_REG_RAX));
     if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-  } // end indirect-jump profiling
 
-  // -----------------------------
-  // BBL frequency counter: *counter_addr += 1 using RAX
-  // -----------------------------
-
-  // MOV RAX, [counter_addr]
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-            xed_reg(XED_REG_RAX),
-            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64));
-  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-  // LEA RAX, [RAX + 1]
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_LEA, 64,
-            xed_reg(XED_REG_RAX),
-            xed_mem_bd(XED_REG_RAX, xed_disp(1, 8), 64));
-  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-  // MOV [counter_addr], RAX
-  xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-            xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)counter_addr, 64), 64),
-            xed_reg(XED_REG_RAX));
-  if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-
-  // ---- FINAL RESTORE of RAX (skip if it will be killed later) ----
-  if (killed_reg == REG_RAX) {
-    // No restore: a later instruction in this BBL overwrites RAX anyway.
-  } else if (save_to_killed_reg) {
+    // --- Restore RAX ---
     // MOV RAX, killed_reg
     xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
               xed_reg(XED_REG_RAX),
-              xed_reg(INS_XedExactMapFromPinReg(killed_reg)));
+              xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)));
     if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-  } else {
-    // MOV RAX, [rax_mem]
-    xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX),
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-    if (add_prof_instr(ins_addr, &enc_instr, ins) < 0) return -1;
-  }
 
   return 0;
 }
@@ -1416,12 +1523,7 @@ int create_tc(IMG img)
             continue;
                 
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
-        {    
-            //for the part of the killed regs
-            bool isBBLAlreadyProfiled = false;
-            bool is_checked_Killed_RAX = false;
-            bool isRaxKilledInBBL = false; 
-                               
+        {                        
             // Open the RTN.
             RTN_Open( rtn );
             
@@ -1434,6 +1536,10 @@ int create_tc(IMG img)
                  is_targ_map[targ_addr] = true;
                }
             }
+
+            bool was_profiled = false;
+            bool indirect_profiled = false;
+
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
@@ -1484,29 +1590,12 @@ int create_tc(IMG img)
                       cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << ins_addr << endl;
                       return -1;;
                   }
-                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, ins);
+                  rc = add_new_instr_entry(&xedd, ins_addr, ins_type, false, ins);
                   if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
                   }
                   ins_type = RegularIns;
-                }
-                
-
-                //Scan forward through the rest of the basic block to see if there’s an instruction that overwrites (kills) RAX
-                if (!is_checked_Killed_RAX) {
-                    isRaxKilledInBBL = false;
-                    for (INS next_ins = ins; INS_Valid(next_ins); next_ins = INS_Next(next_ins)) {
-                        if (isJumpOrRet(next_ins))
-                            break;
-                        if (RTN_FindByAddress(INS_Address(next_ins)) != rtn)
-                            break;
-                        if (getKilledRegByIns(next_ins) == REG_RAX) {
-                            isRaxKilledInBBL = true;
-                            break;
-                        }
-                    }
-                    is_checked_Killed_RAX = true;
                 }
 
                 // Check if ins is a control transfer instr that terminates a BBL
@@ -1516,20 +1605,30 @@ int create_tc(IMG img)
                     (!INS_Valid(next_ins) ? false : is_targ_map[INS_Address(next_ins)]);
                 bool isInsTerminatesBBL = (isJumpOrRet(ins) || isNextInsJumpTarget);
 
-
-		 REG killed_reg = getKilledRegByIns(ins);
-		 
-                // Add profiling instructions to count each BBL exec at runtime:
-                // Skip inserting profiling here if a later instruction in this BBL overwrites RAX.
-
-                if (KnobApplyThreadedCommit && !isBBLAlreadyProfiled) {
-                  if (isInsTerminatesBBL || (isRaxKilledInBBL && killed_reg == REG_RAX) || (!isRaxKilledInBBL && killed_reg != REG_INVALID()) ) {
-                    isBBLAlreadyProfiled = true;
-                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, killed_reg);
+                REG killed_reg = getKilledRegByIns(ins);
+                bool found_reg = !(killed_reg == REG_INVALID() || REG_FullRegName(killed_reg) == REG_RAX);
+                // short Add profiling instructions to count each BBL exec at runtime:
+                //
+                if (KnobApplyThreadedCommit) {
+                  if (found_reg && !was_profiled) {
+                    rc = add_profiling_instrs_short(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, killed_reg);
                     if (rc < 0)
                       return -1;
+                    was_profiled = true;
+                  }
                 }
-}
+                                        
+                // Add profiling instructions to count each BBL exec at runtime:
+                //
+                indirect_profiled = false;
+
+                if (KnobApplyThreadedCommit) {
+                  if (isInsTerminatesBBL) {
+                    rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num].counter, bbl_num, was_profiled, indirect_profiled);
+                    if (rc < 0)
+                      return -1;
+                  }
+                }
           
                 // Add ins to instr_map:
                 //
@@ -1540,15 +1639,17 @@ int create_tc(IMG img)
                     return -1;
                 }
 
-                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, ins);
+                rc = add_new_instr_entry(&xedd, INS_Address(ins), ins_type, indirect_profiled, ins);
                 if (rc < 0) {
                     cerr << "ERROR: failed during instructon translation." << endl;
                     return -1;
                 }
-
+                
+                
                 if (isInsTerminatesBBL) {
                   bbl_map[bbl_num].terminating_ins_entry = num_of_instr_map_entries - 1;
                   bbl_num++;
+                  was_profiled = false;
                   bbl_map[bbl_num].starting_ins_entry = num_of_instr_map_entries;
                 }
 
@@ -1557,7 +1658,7 @@ int create_tc(IMG img)
                 //     immediately after the cond branch which terminates the bbl.
                 //     and before the next BBL.
                 if (KnobApplyThreadedCommit && INS_Category(ins) == XED_CATEGORY_COND_BR) {
-                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1, killed_reg);
+                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1, was_profiled, indirect_profiled);
                   if (rc < 0)
                     return -1;
                 }
@@ -1577,7 +1678,6 @@ int create_tc(IMG img)
 
          } // end for RTN..
     } // end for SEC...
-   
     
     return 0;
 }
@@ -1714,30 +1814,25 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
-int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
-                        char* encode_ins, 
-                        unsigned int * size)
-{
-  unsigned int ilen = XED_MAX_INSTRUCTION_BYTES;
 
-  // Convert the encoding instr to a valid encoder request.
-  xed_encoder_request_t enc_req;    
-  xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-  xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, enc_instr);
-  if (!convert_ok) {
-      cerr << "conversion to encode request failed" << endl;
-      return -1;
-  }
-  
-  // Encode instr.
-  xed_error_enum_t xed_error = xed_encode(&enc_req,
-            reinterpret_cast<UINT8*>(encode_ins), ilen, size);
-  if (xed_error != XED_ERROR_NONE) {
-      cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-    return -1;
-  }
-  return 0;
+bool is_RAX(INS ins) {
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RAX;
 }
+
+
+bool is_rip(INS ins) {
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_RIP;
+}
+
+
+bool is_invalid(INS ins) {
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_INVALID;
+}
+
+
 
 /****************************/
 /* create_tc2_thread_func() */
@@ -1757,88 +1852,87 @@ void create_tc2_thread_func(void *v)
 
     // Step 2.1: Modify instr_map to be used for TC2.
     //
-    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {    
-       // Set new_ins_addr to be the orig_ins_addr.
-       instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
-                        
-       // Skip the profiling instructions added in TC for each BBL.
-       if (instr_map[i].ins_type == ProfilingIns)
-         instr_map[i].size = 0;
-       
-       // Skip the wide NOP instr at the Rtn head which was reserved
-       // for the probing jump from TC to TC2.
-       if (instr_map[i].ins_type == RtnHeadIns &&
-           instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
-         instr_map[i].size = 0;
-       
-       // Remove unused NOPs.
-       if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
-           instr_map[i].xed_category == XED_CATEGORY_NOP)
-         instr_map[i].size = 0;
-
-       // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
-       if (instr_map[i].targ_map_entry >= 0) {
-         ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
-         instr_map[i].orig_targ_addr = new_targ_addr;
-       }
-       
-        //de-virtualization
-      
-        INS ins = instr_map[i].ins;
-        bool rip_flag= false; 
-        for (UINT32 op = 0; op < INS_OperandCount(ins); ++op) {
-          if (INS_OperandIsMemory(ins, op)) {
-              if (INS_OperandMemoryBaseReg(ins, op) == REG_RIP) {
-                  rip_flag= true;
-              }
+    
+    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {   
+      /* debug print
+      if (instr_map[i].indirect_profiled){
+        cerr << "i = " << i << " indirect cmd" << endl;
+        if (i < 11){
+          cerr << "i is too small" << endl;
+          exit(1);
+        }
+        else {
+          for (int j = 1; j <=11; j++) {
+            if (instr_map[i-j].ins_type != ProfilingIns) {
+              cerr <<"cmd " << i-j << " isnt profiiling" <<endl;
+              exit(1);
+            }
           }
         }
-        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins) && !rip_flag) {
-          
-          bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
-          int index = 0; 
-          int total_jumps_counter = 0;
-          for (int i = 0 ; i <= MAX_TARG_ADDRS ; i++) {
-            index = (curr_bbl.targ_count[i] > curr_bbl.targ_count[index]) ? i : index;
-            total_jumps_counter += curr_bbl.targ_count[i];
-            }
-            
-            if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-              // save rax
-              xed_encoder_instruction_t enc_instr;
-              static uint64_t rax_mem = 0;
+      }
+      */
+       
+      // Set new_ins_addr to be the orig_ins_addr.
+      instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
+                      
+      // Skip the profiling instructions added in TC for each BBL.
+      if (instr_map[i].ins_type == ProfilingIns)
+        instr_map[i].size = 0;
+      
+      // Skip the wide NOP instr at the Rtn head which was reserved
+      // for the probing jump from TC to TC2.
+      if (instr_map[i].ins_type == RtnHeadIns &&
+          instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
+        instr_map[i].size = 0;
+      
+      // Remove unused NOPs.
+      if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
+          instr_map[i].xed_category == XED_CATEGORY_NOP)
+        instr_map[i].size = 0;
 
-              // Save RAX - MOV RAX into rax_mem
-              if (instr_map[i -11].ins_type == ProfilingIns &&
-                  instr_map[i -11].size == 0) {
-                  cerr << "can be edited" <<endl;
-              }
-              else {
-                cerr << "bigtime error" <<endl;
-                cerr << std::hex << INS_Address(ins) << ": "
-                    << INS_Disassemble(ins)
-                    << "  (size=" << std::dec << INS_Size(ins) << ")"
-                    << endl;
-                cerr << " i - 11 is: " << i - 11 << endl;
-                cerr << "type is: " <<instr_map[i -11].ins_type << endl;
-                cerr << "size is: " << instr_map[i -11].size << endl;
-              }
-              cerr << "editing tc2" <<endl;
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
-                xed_reg(XED_REG_RAX));
-              set_encode_and_size(&enc_instr, 
-                                  instr_map[i-11].encoded_ins,
-                                  &(instr_map[i-11].size));
-              cerr << "enc ins: " << instr_map[i-11].encoded_ins << " size: "<< instr_map[i-11].size <<endl;
+      // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
+      if (instr_map[i].targ_map_entry >= 0) {
+        ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
+        instr_map[i].orig_targ_addr = new_targ_addr;
+      }
 
-            }
-            
+
+      /*****************de virtualtion *************************************/
+
+      if (instr_map[i].indirect_profiled){
+        if(is_RAX(instr_map[i].ins) )
+        	cerr << "RAX !!!!!!!!!!!!!!!!!!!!!"<< endl;
+        	
+        if(is_invalid(instr_map[i].ins)  )
+        	cerr << "INVALID !!!!!!!!!!!!!!!!!!!!!"<< endl;
+        	
+        
+        if(is_rip(instr_map[i].ins) ) 
+        	cerr << "RIP !!!!!!!!!!!!!!!!!!!!!"<< endl;
+        	
         }
-       
-       
-       
-       
+        
+ 
+      if (instr_map[i].indirect_profiled ) {
+        bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
+        int index = 0; 
+        int total_jumps_counter = 0;
+        for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
+          index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
+          total_jumps_counter += curr_bbl.targ_count[j];
+          }
+          if (total_jumps_counter == 0) {
+            cerr << "zero jump were collected " << endl;
+            continue;
+          }
+          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
+                cerr << "hello from the other side!!!!!!!!!!!!!!!!" <<  endl;
+          }
+          else{
+              cerr << "not dominent jump" << endl;
+          }
+      }
+      /*********************************************************************/
     }
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
@@ -2119,5 +2213,3 @@ int main(int argc, char * argv[])
 /* ===================================================================== */
 /* eof */
 /* ===================================================================== */
-
-
