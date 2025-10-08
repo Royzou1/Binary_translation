@@ -1759,7 +1759,7 @@ void create_tc2_thread_func(void *v)
        }
        
        //de-virtualization
-       /*
+      
        INS ins = instr_map[i].ins;
        if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins)) {
 		bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
@@ -1775,7 +1775,7 @@ void create_tc2_thread_func(void *v)
                 }
        
        }
-       */
+       
        
        
        
