@@ -1084,7 +1084,7 @@ int add_profiling_instrs_short(INS ins,
     } else {
         cerr << "found dead reg inserting counters" << endl;
         // MOV killed_reg, RAX
-        if (killed_reg_pin == XED_REG_INVALID) return -1; // defensive
+        if (killed_reg_pin == REG_INVALID()) return -1; // defensive
         xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                   xed_reg(INS_XedExactMapFromPinReg(killed_reg_pin)),
                   xed_reg(XED_REG_RAX));
