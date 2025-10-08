@@ -795,7 +795,7 @@ int add_profiling_instrs( INS ins,
                           UINT64 *counter_addr, 
                           unsigned bbl_num, 
                           bool was_profiled,
-                          bool &indirect_profiled
+                          bool &indirect_profiled,
                           bool &is_rip)
 {
   xed_encoder_instruction_t enc_instr;
