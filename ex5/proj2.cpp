@@ -1065,7 +1065,6 @@ int add_profiling_instrs_short(INS ins,
 {
     cerr << "short route" <<endl;
     xed_encoder_instruction_t enc_instr;
-    static uint64_t rax_mem = 0;
 
     // 4-byte NOP placeholder for later patching
     xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
