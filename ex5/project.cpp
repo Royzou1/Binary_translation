@@ -1840,6 +1840,24 @@ bool is_invalid(INS ins) {
     return xed_decoded_inst_get_base_reg(xedd, 0) == XED_REG_INVALID;
 }
 
+bool is_jump_reg_not_rax_rip(INS ins) {
+    if (!INS_IsIndirectBranchOrCall(ins))
+        return false;
+
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
+
+    // Must be a register target (e.g. jmp rbx)
+    if (targ_reg == XED_REG_INVALID)
+        return false;
+
+    // Exclude RAX and RIP
+    if (targ_reg == XED_REG_RAX || targ_reg == XED_REG_RIP)
+        return false;
+
+    return true;
+}
+
 
 
 /****************************/
@@ -1909,15 +1927,14 @@ void create_tc2_thread_func(void *v)
       
       
       if (instr_map[i].indirect_profiled) {
-
         // 1) Print the disassembly
-        cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+        cerr << "--------------------------------------------------" << endl;
+        cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
         xed_decoded_inst_t *xedd = INS_XedDec(instr_map[i].ins);
         xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
         cerr << xed_reg_enum_t2str(targ_reg) << endl;
+        cerr << "is_jump_reg_not_rax_rip" <<is_jump_reg_not_rax_rip(ins) << endl;
       }
-        
-        
  
       if (instr_map[i].indirect_profiled ) {
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
@@ -1926,17 +1943,18 @@ void create_tc2_thread_func(void *v)
         for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
+        }
+        if (total_jumps_counter == 0) {
+          cerr << "zero jump were collected " << endl;
+          continue;
+        }
+        if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
+          // jump reg | (reg != rax)
+          if (is_jump_reg_not_rax_rip(ins)) {
+
           }
-          if (total_jumps_counter == 0) {
-            cerr << "zero jump were collected " << endl;
-            continue;
-          }
-          if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-                cerr << "hello from the other side!!!!!!!!!!!!!!!!" <<  endl;
-          }
-          else{
-              cerr << "not dominent jump" << endl;
-          }
+          
+        }
       }
       /*********************************************************************/
     }
