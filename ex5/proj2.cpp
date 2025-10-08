@@ -1664,7 +1664,7 @@ int create_tc(IMG img)
                 //     immediately after the cond branch which terminates the bbl.
                 //     and before the next BBL.
                 if (KnobApplyThreadedCommit && INS_Category(ins) == XED_CATEGORY_COND_BR) {
-                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1, was_profiled, false, false);
+                  rc = add_profiling_instrs(ins, ins_addr, &bbl_map[bbl_num - 1].fallthru_counter, bbl_num-1, was_profiled, indirect_profiled, is_rip);
                   if (rc < 0)
                     return -1;
                 }
