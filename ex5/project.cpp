@@ -1817,19 +1817,14 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
-bool is_jump_reg_not_rax_rip(INS ins, xed_reg_enum_t &targ_reg) {
-    xed_decoded_inst_t* xedd = INS_XedDec(ins);
-    targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
+bool is_jump_reg_not_rax_rip(INS ins) {
+    const UINT32 memops = INS_MemoryOperandCount(ins);
+    for (UINT32 i = 0; i < memops; i++) {
+        REG base = INS_OperandMemoryBaseReg(ins, i);  // note the 'i' arg
+        if (base != REG_INVALID() && REG_FullRegName(base) == REG_RAX) return true;
+    }
+    return false;
 
-    // Must be a register target (e.g. jmp rbx)
-    if (targ_reg == XED_REG_INVALID)
-        return false;
-
-    // Exclude RAX and RIP
-    if (targ_reg == XED_REG_RAX || targ_reg == XED_REG_RIP)
-        return false;
-
-    return true;
 }
 
 int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
@@ -1962,18 +1957,21 @@ void create_tc2_thread_func(void *v)
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
         }
-
+        cerr << "bbl num" << bbl_map[instr_map[i].bbl_num << 
+                "counter: " << curr_bbl.counter <<  
+                "total count: " << total_jumps_counter << endl;
+        
         if (total_jumps_counter == 0) {
-          
           cerr << "zero jump were collected; counter is: "<< curr_bbl.counter << endl;
           continue;
         }
-        else
-          cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        
         if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-          // jump reg | (reg != rax)
-          xed_reg_enum_t targ_reg;
-          if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
+          // jump [rax * 8 + immidiate]
+
+          //xed_reg_enum_t targ_reg;
+          if (is_jump_reg_not_rax_rip(instr_map[i].ins)) {
+            cerr<< "pllllleeeeeaaaaseeee work!!!!!!" << endl;
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
             unsigned targ_index = 0;
