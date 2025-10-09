@@ -1741,34 +1741,13 @@ void create_tc2_thread_func(void *v)
     //add counters
 
     outfile.open("bb-profile.csv");
+    
+    size_t n = sizeof(bbl_map)/sizeof(bbl_map[0]);   // or std::size(arr) in C++17+
 
-    // Vector to store tuples of bbl address and pointer to profile
-
-
-    // Sort by exec_counter descending
-    //std::sort(bbl_map.begin(), bbl_map.end(),
-    //    [](const bbl_map_t* a, const bbl_map_t* b) {
-    //        return a->counter > b->counter;
-    //    });
-
-    //outfile << "BBL Address, Exec Count, Taken Count, Fallthrough Count";
-    //for (int i = 0; i < MAX_TARG; ++i) {
-    //    outfile << ", Target Addr " << (i + 1) << ", Target Exec Count " << (i + 1);
-    //}
-    //outfile << endl;
-
-    // Emit the sorted results
-    for (const auto& bbl : bbl_map) {
-        // Compute taken_num from exec_counter and fallthrough
-        //UINT64 computed_taken = bbl->exec_counter > bbl->fallthrough_num ?
-        //                        bbl->exec_counter - bbl->fallthrough_num : 0;
-                                
-        //UINT64 computed_fallthrough= bbl->exec_counter > bbl->fallthrough_num ?
-        //                        bbl->fallthrough_num : bbl->exec_counter;
-                                
-
-        outfile << std::hex <<  bbl->counter << endl;
-
+    for (size_t i = 0; i < n; ++i) {
+        outfile << ", " << std::dec << i
+                        << ", " << std::dec << bbl_map[i]->counter;
+    }
     outfile.close();
 
     // Step 2.1: Modify instr_map to be used for TC2.
