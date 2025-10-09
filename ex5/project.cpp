@@ -1961,9 +1961,9 @@ void create_tc2_thread_func(void *v)
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
         }
-        cerr << "bbl num" << instr_map[i].bbl_num << 
-                "counter: " << curr_bbl.counter <<  
-                "total count: " << total_jumps_counter << endl;
+        cerr << "bbl num: " << instr_map[i].bbl_num << 
+                ", counter: " << curr_bbl.counter <<  
+                ", total count: " << total_jumps_counter << endl;
         
         if (total_jumps_counter == 0) {
           cerr << "zero jump were collected; counter is: "<< curr_bbl.counter << endl;
@@ -1975,6 +1975,7 @@ void create_tc2_thread_func(void *v)
 
           xed_reg_enum_t targ_reg;
           if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
+            cerr << "rax is the boss!!!!!!!!!!" << endl;
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
             unsigned targ_index = 0;
