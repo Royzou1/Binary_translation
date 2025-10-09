@@ -1856,6 +1856,37 @@ int set_encode_and_size(xed_encoder_instruction_t *enc_instr,
   return 0;
 }
 
+// Return true iff:  jmp qword ptr [rax*8 + disp32]
+// On success sets:  rax = XED_REG_RAX, disp = the signed disp32 value.
+bool correct_form(INS ins, xed_int32_t& disp) {
+    xed_decoded_inst_t* x = INS_XedDec(ins);
+
+    // Must be a JMP that uses a memory operand
+    if (xed_decoded_inst_get_iclass(x) != XED_ICLASS_JMP) return false;
+    if (xed_decoded_inst_number_of_memory_operands(x) != 1) return false;
+
+    const unsigned i = 0; // JMP has a single mem operand
+    xed_reg_enum_t base  = xed_decoded_inst_get_base_reg(x,  i);
+    xed_reg_enum_t index = xed_decoded_inst_get_index_reg(x, i);
+    xed_uint_t     scale = xed_decoded_inst_get_scale(x,     i);
+    xed_uint_t     mlen  = xed_decoded_inst_get_memory_operand_length(x, i); // bytes
+
+    // Displacement
+    xed_uint_t     dispw = xed_decoded_inst_get_memory_displacement_width(x, i); // bits
+    xed_int64_t    d64   = xed_decoded_inst_get_memory_displacement(x, i);
+
+    // Match: [RAX*8 + disp32]  (no base, index=RAX, scale=8, qword)
+    if (base  != XED_REG_INVALID)        return false;
+    if (index != XED_REG_RAX)            return false;
+    if (scale != 8)                      return false;
+    if (mlen  != 8)                      return false; // qword ptr
+    if (dispw != 32)                     return false; // specifically disp32
+
+    disp = static_cast<xed_int32_t>(d64); // sign-truncate from 64
+    return true;
+}
+
+
 /****************************/
 /* create_tc2_thread_func() */
 /****************************/
@@ -1940,27 +1971,21 @@ void create_tc2_thread_func(void *v)
 
       /*****************de virtualtion *************************************/
       
-      
-      if (instr_map[i].indirect_profiled) {
-        // 1) Print the disassembly
+      //wanted instr of the form jmp qword ptr [rax*8+0x6f2a38]
+      xed_int32_t& disp;
+      if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, &disp)) {
         cerr << "--------------------------------------------------" << endl;
         cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
-        xed_decoded_inst_t *xedd = INS_XedDec(instr_map[i].ins);
-        xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-        //cerr << xed_reg_enum_t2str(targ_reg) << endl;
-        cerr << "is_jump_reg_not_rax_rip: " <<is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg) << endl;
-      }
- 
-      if (instr_map[i].indirect_profiled ) {
+        
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0; 
         int total_jumps_counter = 0;
-        
         
         for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
         }
+        
         cerr << "bbl num: " << instr_map[i].bbl_num << 
                 ", counter: " << curr_bbl.counter <<  
                 ", total count: " << total_jumps_counter << endl;
