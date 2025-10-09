@@ -1959,8 +1959,8 @@ void create_tc2_thread_func(void *v)
           xed_reg_enum_t targ_reg;
           if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
             // check if shortcut is available
-            hot_og = curr_bbl.targ_addr[index];
-            unsigned targ_index = 0
+            ADDRINT hot_og = curr_bbl.targ_addr[index];
+            unsigned targ_index = 0;
             for (targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
               if (instr_map[targ_index].og_not_changed == hot_og)
                 break;
