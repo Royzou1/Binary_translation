@@ -1952,9 +1952,9 @@ void create_tc2_thread_func(void *v)
     /***************** de-virtualization *************************************/
     xed_int32_t disp = 0;
     if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
-        //cerr << "--------------------------------------------------\n";
-        //cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
-        //cerr << "the disp is : " << disp << "\n";
+        cerr << "--------------------------------------------------\n";
+        cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+        cerr << "the disp is : " << disp << "\n";
 
         bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0;
@@ -1965,20 +1965,20 @@ void create_tc2_thread_func(void *v)
             total_jumps_counter += curr_bbl.targ_count[j];
         }
 
-        //cerr << "bbl num: " << instr_map[i].bbl_num
-        //          << ", counter: " << curr_bbl.counter
-        //          << ", total count: " << total_jumps_counter << "\n";
+        cerr << "bbl num: " << instr_map[i].bbl_num
+                  << ", counter: " << curr_bbl.counter
+                  << ", total count: " << total_jumps_counter << "\n";
 
         if (total_jumps_counter == 0) {
-            //cerr << "zero jumps were collected; counter is: " << curr_bbl.counter << "\n";
+            cerr << "zero jumps were collected; counter is: " << curr_bbl.counter << "\n";
         }
         else if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {
-            //cerr << "Not dominant address\n";
+            cerr << "Not dominant address\n";
         }
         else {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
-            //cerr << "hot_og: " << hot_og << ", size is: " << sizeof(hot_og) << endl;
+            cerr << "hot_og: " << hot_og << ", size is: " << sizeof(hot_og) << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
@@ -1990,9 +1990,9 @@ void create_tc2_thread_func(void *v)
             else 
             {
               // emit shortcut
-              //cerr << "\033[1;32memit shortcut\033[37m\n";
-              //cerr << "hot_tc2: " << instr_map[targ_index].new_ins_addr << 
-              //        ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
+              cerr << "\033[1;32memit shortcut\033[37m\n";
+              cerr << "hot_tc2: " << instr_map[targ_index].new_ins_addr << 
+                      ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
               static uint64_t rbx_mem = 0;
