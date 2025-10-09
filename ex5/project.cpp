@@ -1869,18 +1869,18 @@ bool correct_form(INS ins, xed_int32_t& disp) {
     xed_reg_enum_t base  = xed_decoded_inst_get_base_reg(x,  i);
     xed_reg_enum_t index = xed_decoded_inst_get_index_reg(x, i);
     xed_uint_t     scale = xed_decoded_inst_get_scale(x,     i);
-    //xed_uint_t     mlen  = xed_decoded_inst_get_memory_operand_length(x, i); // bytes
+    xed_uint_t     mlen  = xed_decoded_inst_get_memory_operand_length(x, i); // bytes
 
     // Displacement
-    //xed_uint_t     dispw = xed_decoded_inst_get_memory_displacement_width(x, i); // bits
+    xed_uint_t     dispw = xed_decoded_inst_get_memory_displacement_width(x, i); // bits
     xed_int64_t    d64   = xed_decoded_inst_get_memory_displacement(x, i);
 
     // Match: [RAX*8 + disp32]  (no base, index=RAX, scale=8, qword)
     if (base  != XED_REG_INVALID)        return false;
     if (index != XED_REG_RAX)            return false;
     if (scale != 8)                      return false;
-    //if (mlen  != 8)                      return false; // qword ptr
-    //if (dispw != 32)                     return false; // specifically disp32
+    if (mlen  != 8)                      return false; // qword ptr
+    if (dispw != 32)                     return false; // specifically disp32
 
     disp = static_cast<xed_int32_t>(d64); // sign-truncate from 64
     return true;
