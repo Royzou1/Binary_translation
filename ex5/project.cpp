@@ -2080,7 +2080,7 @@ void create_tc2_thread_func(void *v)
                                   &instr_map[i-4].size);
 
               // J RAX | -2
-              xed_inst1(&enc_jmp, dstate, XED_ICLASS_JMP, 64, xed_reg(XED_REG_RAX));
+              xed_inst1(&enc_instr, dstate, XED_ICLASS_JMP, 64, xed_reg(XED_REG_RAX));
               set_encode_and_size(&enc_jmp, 
                                   instr_map[i-2].encoded_ins, 
                                   &instr_map[i-2].size);
