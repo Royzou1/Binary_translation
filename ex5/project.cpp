@@ -1967,7 +1967,7 @@ void create_tc2_thread_func(void *v)
                                 &(instr_map[i-6].size));
 
             //load hottest_og rax
-            hottest_og   
+            //hottest_og   
             //compare rax target_reg
             
             // Restore RAX - MOV from rax_mem into RAX
