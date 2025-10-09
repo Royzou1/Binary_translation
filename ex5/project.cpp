@@ -1876,7 +1876,7 @@ void create_tc2_thread_func(void *v)
 
        //add counters
 
-    outfile.open("bb-profile.csv_new");
+    outfile.open("bb-profile-new.csv");
     
     size_t n = max_ins_count / 10;   // or std::size(arr) in C++17+
 
