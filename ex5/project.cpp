@@ -1959,9 +1959,9 @@ void create_tc2_thread_func(void *v)
           xed_reg_enum_t targ_reg;
           if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
             // check if shortcut is available
-            hot_og = curr_bbl.target_addr[index];
-            targ_index = 0
-            for (unsigned targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
+            hot_og = curr_bbl.targ_addr[index];
+            unsigned targ_index = 0
+            for (targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
               if (instr_map[targ_index].og_not_changed == hot_og)
                 break;
             }
@@ -1988,7 +1988,7 @@ void create_tc2_thread_func(void *v)
               //ADDRINT* hottest_og_mem = &(curr_bbl.target_addr[index])
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                 xed_reg(XED_REG_RAX), // Destination reg op.
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.target_addr[index], 64), 64));
+                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
               
               set_encode_and_size(&enc_instr, 
                                   (instr_map[i-5].encoded_ins), 
@@ -1997,7 +1997,7 @@ void create_tc2_thread_func(void *v)
               //compare rax target_reg
               xed_inst2(&enc_instr, dstate,
                 XED_ICLASS_CMP, 64,
-                xed_reg(XED_REG_RAX), xed_reg(target_reg)); 
+                xed_reg(XED_REG_RAX), xed_reg(targ_reg)); 
               
               set_encode_and_size(&enc_instr, 
                 (instr_map[i-4].encoded_ins), 
