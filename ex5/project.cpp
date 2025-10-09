@@ -1879,8 +1879,8 @@ bool correct_form(INS ins, xed_int32_t& disp) {
     if (base  != XED_REG_INVALID)        return false;
     if (index != XED_REG_RAX)            return false;
     if (scale != 8)                      return false;
-    if (mlen  != 8)                      return false; // qword ptr
-    if (dispw != 32)                     return false; // specifically disp32
+    //if (mlen  != 8)                      return false; // qword ptr
+    //if (dispw != 32)                     return false; // specifically disp32
 
     disp = static_cast<xed_int32_t>(d64); // sign-truncate from 64
     return true;
