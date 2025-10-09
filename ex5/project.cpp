@@ -1954,7 +1954,7 @@ void create_tc2_thread_func(void *v)
           continue;
         }
         else
-          cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
         if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
           // jump reg | (reg != rax)
           xed_reg_enum_t targ_reg;
