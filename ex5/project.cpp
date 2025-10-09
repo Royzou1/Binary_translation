@@ -1934,7 +1934,7 @@ void create_tc2_thread_func(void *v)
         cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
         xed_decoded_inst_t *xedd = INS_XedDec(instr_map[i].ins);
         xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-        cerr << xed_reg_enum_t2str(targ_reg) << endl;
+        //cerr << xed_reg_enum_t2str(targ_reg) << endl;
         cerr << "is_jump_reg_not_rax_rip: " <<is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg) << endl;
       }
  
