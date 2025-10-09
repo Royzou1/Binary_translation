@@ -1993,97 +1993,92 @@ void create_tc2_thread_func(void *v)
         
         if (total_jumps_counter == 0) {
           cerr << "zero jump were collected; counter is: "<< curr_bbl.counter << endl;
-          continue;
         }
-        
-        if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
-          // jump [rax * 8 + immidiate]
+        elif (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {  
+          cerr << "Not dominent address" << endl;
+        } 
+        else {      
+          // check if shortcut is available
+          ADDRINT hot_og = curr_bbl.targ_addr[index];
+          unsigned targ_index = 0;
+          for (targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
+            if (instr_map[targ_index].og_not_changed == hot_og)
+              break;
+          }
+          if (targ_index== num_of_instr_map_entries) {
+            cerr << "target inst found" << endl;
+          }
+          else 
+          {
+            // emit shortcut
+            cerr << "emit shortcut" << endl;
+            xed_encoder_instruction_t enc_instr;
+            static uint64_t rax_mem = 0;
 
-          xed_reg_enum_t targ_reg;
-          if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
+            // Save RAX - MOV RAX into rax_mem
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
+              xed_reg(XED_REG_RAX));
+
+            set_encode_and_size(&enc_instr, 
+                                (instr_map[i-6].encoded_ins), 
+                                &(instr_map[i-6].size));
+
+            //load hottest_og rax
+            //ADDRINT* hottest_og_mem = &(curr_bbl.target_addr[index])
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX), // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
             
-            cerr << "rax is the boss!!!!!!!!!!" << endl;
-            // check if shortcut is available
-            ADDRINT hot_og = curr_bbl.targ_addr[index];
-            unsigned targ_index = 0;
-            for (targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
-              if (instr_map[targ_index].og_not_changed == hot_og)
-                break;
-            }
-            if (targ_index== num_of_instr_map_entries) {
-              cerr << "target inst found" << endl;
-            }
-            else 
-            {
-              // emit shortcut
-              cerr << "emit shortcut" << endl;
-              xed_encoder_instruction_t enc_instr;
-              static uint64_t rax_mem = 0;
+            set_encode_and_size(&enc_instr, 
+                                (instr_map[i-5].encoded_ins), 
+                                &(instr_map[i-5].size));
+            
+            //compare rax target_reg
+            xed_inst2(&enc_instr, dstate,
+              XED_ICLASS_CMP, 64,
+              xed_reg(XED_REG_RAX), xed_reg(targ_reg)); 
+            
+            set_encode_and_size(&enc_instr, 
+              (instr_map[i-4].encoded_ins), 
+              &(instr_map[i-4].size));
 
-              // Save RAX - MOV RAX into rax_mem
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
-                xed_reg(XED_REG_RAX));
+            // Restore RAX - MOV from rax_mem into RAX
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(XED_REG_RAX), // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
 
-              set_encode_and_size(&enc_instr, 
-                                  (instr_map[i-6].encoded_ins), 
-                                  &(instr_map[i-6].size));
+            set_encode_and_size(&enc_instr, 
+                                (instr_map[i-3].encoded_ins), 
+                                &(instr_map[i-3].size));
 
-              //load hottest_og rax
-              //ADDRINT* hottest_og_mem = &(curr_bbl.target_addr[index])
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(XED_REG_RAX), // Destination reg op.
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
-              
-              set_encode_and_size(&enc_instr, 
-                                  (instr_map[i-5].encoded_ins), 
-                                  &(instr_map[i-5].size));
-              
-              //compare rax target_reg
-              xed_inst2(&enc_instr, dstate,
-                XED_ICLASS_CMP, 64,
-                xed_reg(XED_REG_RAX), xed_reg(targ_reg)); 
-              
-              set_encode_and_size(&enc_instr, 
-                (instr_map[i-4].encoded_ins), 
-                &(instr_map[i-4].size));
+            
+            //load hottetst_tc2 to targ_reg            
+            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+              xed_reg(targ_reg), // Destination reg op.
+              xed_mem_bd(XED_REG_INVALID, 
+              xed_disp((ADDRINT)&(instr_map[targ_index].new_ins_addr), 64), 64));
 
-              // Restore RAX - MOV from rax_mem into RAX
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(XED_REG_RAX), // Destination reg op.
-                xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+            set_encode_and_size(&enc_instr, 
+                                (instr_map[i-1].encoded_ins), 
+                                &(instr_map[i-1].size));
 
-              set_encode_and_size(&enc_instr, 
-                                  (instr_map[i-3].encoded_ins), 
-                                  &(instr_map[i-3].size));
-
-              
-              //load hottetst_tc2 to targ_reg            
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                xed_reg(targ_reg), // Destination reg op.
-                xed_mem_bd(XED_REG_INVALID, 
-                xed_disp((ADDRINT)&(instr_map[targ_index].new_ins_addr), 64), 64));
-
-              set_encode_and_size(&enc_instr, 
-                                  (instr_map[i-1].encoded_ins), 
-                                  &(instr_map[i-1].size));
-
-              //jne rip + olen(i-1)
-              xed_encoder_instruction_t enc_jcc;
-                xed_inst1(&enc_jcc, dstate, XED_ICLASS_JNZ /* JNE */, 64,
-                xed_relbr((int8_t)instr_map[i-1].size, 8));   // rel8 = bytes to skip
-              
-              set_encode_and_size(&enc_instr, 
-                (instr_map[i-2].encoded_ins), 
-                &(instr_map[i-2].size));
-              //Lable :
-            }
+            //jne rip + olen(i-1)
+            xed_encoder_instruction_t enc_jcc;
+              xed_inst1(&enc_jcc, dstate, XED_ICLASS_JNZ /* JNE */, 64,
+              xed_relbr((int8_t)instr_map[i-1].size, 8));   // rel8 = bytes to skip
+            
+            set_encode_and_size(&enc_instr, 
+              (instr_map[i-2].encoded_ins), 
+              &(instr_map[i-2].size));
+            //Lable :
           }
         }
-      
       }
-      /*********************************************************************/
+      
     }
+      /*********************************************************************/
+  
     
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
        instr_map[i].targ_map_entry = -1;
