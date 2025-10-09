@@ -1979,7 +1979,6 @@ void create_tc2_thread_func(void *v)
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
             cerr << "hot_og: " << hot_og << ", size is: " << sizeof(hot_og) << endl;
-            cerr << "hot_og: " << instr_map[targ_index].new_ins_addr << ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
@@ -1990,6 +1989,8 @@ void create_tc2_thread_func(void *v)
             } else {
                 // emit shortcut
                 std::cerr << "\033[1;32memit shortcut\033[37m\n";
+                cerr << "hot_og: " << instr_map[targ_index].new_ins_addr << 
+                        ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
                 xed_encoder_instruction_t enc_instr;
                 static uint64_t rax_mem = 0;
                 static uint64_t rbx_mem = 0;
