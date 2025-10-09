@@ -1742,7 +1742,7 @@ void create_tc2_thread_func(void *v)
 
     outfile.open("bb-profile.csv");
     
-    size_t n = sizeof(bbl_map)/sizeof(bbl_map[0]);   // or std::size(arr) in C++17+
+    size_t n = max_ins_count / 10;   // or std::size(arr) in C++17+
 
     for (size_t i = 0; i < n; ++i) {
         outfile << ", " << std::dec << i
