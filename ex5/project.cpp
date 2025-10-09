@@ -1961,7 +1961,7 @@ void create_tc2_thread_func(void *v)
           index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
           total_jumps_counter += curr_bbl.targ_count[j];
         }
-        cerr << "bbl num" << bbl_map[instr_map[i]].bbl_num << 
+        cerr << "bbl num" << instr_map[i].bbl_num << 
                 "counter: " << curr_bbl.counter <<  
                 "total count: " << total_jumps_counter << endl;
         
