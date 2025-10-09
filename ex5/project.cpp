@@ -1925,158 +1925,127 @@ void create_tc2_thread_func(void *v)
       instr_map[i].og_not_changed = instr_map[i].orig_ins_addr;
     }
 
-    for (unsigned i = 0; i < num_of_instr_map_entries; i++) {   
-      /* debug print
-      if (instr_map[i].indirect_profiled){
-        cerr << "i = " << i << " indirect cmd" << endl;
-        if (i < 11){
-          cerr << "i is too small" << endl;
-          exit(1);
-        }
-        else {
-          for (int j = 1; j <=11; j++) {
-            if (instr_map[i-j].ins_type != ProfilingIns) {
-              cerr <<"cmd " << i-j << " isnt profiiling" <<endl;
-              exit(1);
-            }
-          }
-        }
-      }
-      */
-      
-      // Set new_ins_addr to be the orig_ins_addr. 
-      instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
-                      
-      // Skip the profiling instructions added in TC for each BBL.
-      if (instr_map[i].ins_type == ProfilingIns)
-        instr_map[i].size = 0;
-      
-      // Skip the wide NOP instr at the Rtn head which was reserved
-      // for the probing jump from TC to TC2.
-      if (instr_map[i].ins_type == RtnHeadIns &&
-          instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
-        instr_map[i].size = 0;
-      
-      // Remove unused NOPs.
-      if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
-          instr_map[i].xed_category == XED_CATEGORY_NOP)
+   for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
+    // Set new_ins_addr to be the orig_ins_addr.
+    instr_map[i].orig_ins_addr = instr_map[i].new_ins_addr;
+
+    // Skip profiling ins
+    if (instr_map[i].ins_type == ProfilingIns)
         instr_map[i].size = 0;
 
-      // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
-      if (instr_map[i].targ_map_entry >= 0) {
+    // Skip reserved wide NOP at RTN head
+    if (instr_map[i].ins_type == RtnHeadIns &&
+        instr_map[i].xed_category == XED_CATEGORY_WIDENOP)
+        instr_map[i].size = 0;
+
+    // Remove unused NOPs
+    if (instr_map[i].xed_category == XED_CATEGORY_WIDENOP ||
+        instr_map[i].xed_category == XED_CATEGORY_NOP)
+        instr_map[i].size = 0;
+
+    // Fix orig_targ_addr by new_ins_addr and targ_map_entry.
+    if (instr_map[i].targ_map_entry >= 0) {
         ADDRINT new_targ_addr = instr_map[instr_map[i].targ_map_entry].new_ins_addr;
         instr_map[i].orig_targ_addr = new_targ_addr;
-      }
-
-
-      /*****************de virtualtion *************************************/
-      
-      //wanted instr of the form jmp qword ptr [rax*8+0x6f2a38]
-      xed_int32_t disp;
-      if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
-        cerr << "--------------------------------------------------" << endl;
-        cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
-        cerr<< "the diap is : "  << disp << endl;
-        
-        bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
-        int index = 0; 
-        int total_jumps_counter = 0;
-        
-        for (int j = 0 ; j <= MAX_TARG_ADDRS ; j++) {
-          index = (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) ? j : index;
-          total_jumps_counter += curr_bbl.targ_count[j];
-        }
-        
-        cerr << "bbl num: " << instr_map[i].bbl_num << 
-                ", counter: " << curr_bbl.counter <<  
-                ", total count: " << total_jumps_counter << endl;
-        
-        if (total_jumps_counter == 0) {
-          cerr << "zero jump were collected; counter is: "<< curr_bbl.counter << endl;
-        }
-        elif (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {  
-          cerr << "Not dominent address" << endl;
-        } 
-        else {      
-          // check if shortcut is available
-          ADDRINT hot_og = curr_bbl.targ_addr[index];
-          unsigned targ_index = 0;
-          for (targ_index = 0; targ_index <= num_of_instr_map_entries; i++) {
-            if (instr_map[targ_index].og_not_changed == hot_og)
-              break;
-          }
-          if (targ_index== num_of_instr_map_entries) {
-            cerr << "target inst found" << endl;
-          }
-          else 
-          {
-            // emit shortcut
-            cerr << "emit shortcut" << endl;
-            xed_encoder_instruction_t enc_instr;
-            static uint64_t rax_mem = 0;
-
-            // Save RAX - MOV RAX into rax_mem
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64), // Destination op.
-              xed_reg(XED_REG_RAX));
-
-            set_encode_and_size(&enc_instr, 
-                                (instr_map[i-6].encoded_ins), 
-                                &(instr_map[i-6].size));
-
-            //load hottest_og rax
-            //ADDRINT* hottest_og_mem = &(curr_bbl.target_addr[index])
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX), // Destination reg op.
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
-            
-            set_encode_and_size(&enc_instr, 
-                                (instr_map[i-5].encoded_ins), 
-                                &(instr_map[i-5].size));
-            
-            //compare rax target_reg
-            xed_inst2(&enc_instr, dstate,
-              XED_ICLASS_CMP, 64,
-              xed_reg(XED_REG_RAX), xed_reg(targ_reg)); 
-            
-            set_encode_and_size(&enc_instr, 
-              (instr_map[i-4].encoded_ins), 
-              &(instr_map[i-4].size));
-
-            // Restore RAX - MOV from rax_mem into RAX
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(XED_REG_RAX), // Destination reg op.
-              xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
-
-            set_encode_and_size(&enc_instr, 
-                                (instr_map[i-3].encoded_ins), 
-                                &(instr_map[i-3].size));
-
-            
-            //load hottetst_tc2 to targ_reg            
-            xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-              xed_reg(targ_reg), // Destination reg op.
-              xed_mem_bd(XED_REG_INVALID, 
-              xed_disp((ADDRINT)&(instr_map[targ_index].new_ins_addr), 64), 64));
-
-            set_encode_and_size(&enc_instr, 
-                                (instr_map[i-1].encoded_ins), 
-                                &(instr_map[i-1].size));
-
-            //jne rip + olen(i-1)
-            xed_encoder_instruction_t enc_jcc;
-              xed_inst1(&enc_jcc, dstate, XED_ICLASS_JNZ /* JNE */, 64,
-              xed_relbr((int8_t)instr_map[i-1].size, 8));   // rel8 = bytes to skip
-            
-            set_encode_and_size(&enc_instr, 
-              (instr_map[i-2].encoded_ins), 
-              &(instr_map[i-2].size));
-            //Lable :
-          }
-        }
-      }
-      
     }
+
+    /***************** de-virtualization *************************************/
+    xed_int32_t disp = 0;
+    if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
+        std::cerr << "--------------------------------------------------\n";
+        std::cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+        std::cerr << "the disp is : " << disp << "\n";
+
+        bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
+        int index = 0;
+        int total_jumps_counter = 0;
+
+        for (int j = 0; j < MAX_TARG_ADDRS; j++) {  // '<' not '<='
+            if (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) index = j;
+            total_jumps_counter += curr_bbl.targ_count[j];
+        }
+
+        std::cerr << "bbl num: " << instr_map[i].bbl_num
+                  << ", counter: " << curr_bbl.counter
+                  << ", total count: " << total_jumps_counter << "\n";
+
+        if (total_jumps_counter == 0) {
+            std::cerr << "zero jumps were collected; counter is: " << curr_bbl.counter << "\n";
+        }
+        else if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {
+            std::cerr << "Not dominant address\n";
+        }
+        else {
+            // check if shortcut is available
+            ADDRINT hot_og = curr_bbl.targ_addr[index];
+            unsigned targ_index = 0;
+            for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
+                if (instr_map[targ_index].og_not_changed == hot_og)
+                    break;
+            }
+            if (targ_index == num_of_instr_map_entries) {
+                std::cerr << "target inst not found\n";
+            } else {
+                // emit shortcut
+                std::cerr << "emit shortcut\n";
+                xed_encoder_instruction_t enc_instr;
+                static uint64_t rax_mem = 0;
+
+                // Save RAX -> [rax_mem]
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
+                    xed_reg(XED_REG_RAX));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-6].encoded_ins,
+                                    &instr_map[i-6].size);
+
+                // RAX <- [hottest_og]
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                    xed_reg(XED_REG_RAX),
+                    xed_mem_bd(XED_REG_INVALID,
+                               xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-5].encoded_ins,
+                                    &instr_map[i-5].size);
+
+                // CMP RAX, <targ_reg>   (NOTE: make sure targ_reg is defined before)
+                xed_reg_enum_t targ_reg = XED_REG_RAX; // TODO: set to your real target reg
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
+                    xed_reg(XED_REG_RAX), xed_reg(targ_reg));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-4].encoded_ins,
+                                    &instr_map[i-4].size);
+
+                // Restore RAX from [rax_mem]
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                    xed_reg(XED_REG_RAX),
+                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-3].encoded_ins,
+                                    &instr_map[i-3].size);
+
+                // targ_reg <- [tc2_hot_addr]
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                    xed_reg(targ_reg),
+                    xed_mem_bd(XED_REG_INVALID,
+                               xed_disp((ADDRINT)&instr_map[targ_index].new_ins_addr, 64), 64));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-1].encoded_ins,
+                                    &instr_map[i-1].size);
+
+                // JNE +skip (skip = size of previous mov)
+                xed_encoder_instruction_t enc_jcc;
+                xed_inst1(&enc_jcc, dstate, XED_ICLASS_JNZ, 64,
+                          xed_relbr((int8_t)instr_map[i-1].size, 8));
+                set_encode_and_size(&enc_jcc,  // <-- use enc_jcc here
+                                    instr_map[i-2].encoded_ins,
+                                    &instr_map[i-2].size);
+                // Label:
+            }
+        }
+    }
+}
+
       /*********************************************************************/
   
     
