@@ -1973,7 +1973,7 @@ void create_tc2_thread_func(void *v)
       
       //wanted instr of the form jmp qword ptr [rax*8+0x6f2a38]
       xed_int32_t disp;
-      if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, &disp)) {
+      if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
         cerr << "--------------------------------------------------" << endl;
         cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
         
