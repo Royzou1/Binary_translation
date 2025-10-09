@@ -1978,6 +1978,7 @@ void create_tc2_thread_func(void *v)
         else {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
+            cerr << "hot_og: " << hot_og << ", size is: " << sizeof(hot_og) << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
@@ -1990,57 +1991,92 @@ void create_tc2_thread_func(void *v)
                 std::cerr << "emit shortcut\n";
                 xed_encoder_instruction_t enc_instr;
                 static uint64_t rax_mem = 0;
-
+                static uint64_t rbx_mem = 0;
+                
                 // Save RAX -> [rax_mem]
                 xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                     xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
                     xed_reg(XED_REG_RAX));
                 set_encode_and_size(&enc_instr,
-                                    instr_map[i-6].encoded_ins,
-                                    &instr_map[i-6].size);
-
-                // RAX <- [hottest_og]
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                    xed_reg(XED_REG_RAX),
-                    xed_mem_bd(XED_REG_INVALID,
-                               xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
+                                    instr_map[i-12].encoded_ins,
+                                    &instr_map[i-12].size);
+                
+                // Save RBX -> [rbx_mem]
+                //part 1
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_reg(XED_REG_RBX));
                 set_encode_and_size(&enc_instr,
-                                    instr_map[i-5].encoded_ins,
-                                    &instr_map[i-5].size);
-
-                // CMP RAX, <targ_reg>   (NOTE: make sure targ_reg is defined before)
-                xed_reg_enum_t targ_reg = XED_REG_RAX; // TODO: set to your real target reg
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
-                    xed_reg(XED_REG_RAX), xed_reg(targ_reg));
+                                    instr_map[i-11].encoded_ins,
+                                    &instr_map[i-11].size);
+                //part 2
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
+                          xed_reg(XED_REG_RAX));
                 set_encode_and_size(&enc_instr,
-                                    instr_map[i-4].encoded_ins,
-                                    &instr_map[i-4].size);
-
+                                    instr_map[i-10].encoded_ins,
+                                    &instr_map[i-10].size);
+                
                 // Restore RAX from [rax_mem]
                 xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                     xed_reg(XED_REG_RAX),
                     xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
                 set_encode_and_size(&enc_instr,
+                                    instr_map[i-9].encoded_ins,
+                                    &instr_map[i-9].size);
+                
+                // Mov RBX <- [RAX * 8 + disp]
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RBX),                               // dest: rbx
+                          xed_mem_bisd(XED_REG_INVALID, XED_REG_RAX, 8,       // [rax*8 + disp]
+                                      xed_disp(disp, 32), 64));               // disp32, mem width = 64 (qword)
+
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-8].encoded_ins,
+                                    &instr_map[i-8].size);
+
+                //MOV RAX <- hot_og_addr
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                        xed_reg(XED_REG_RAX), // Destination reg op.
+                        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-7].encoded_ins,
+                                    &instr_map[i-7].size); 
+                
+                // CMP RAX RBX
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
+                          xed_reg(XED_REG_RAX),   // First operand (destination/left)
+                          xed_reg(XED_REG_RBX));  // Second operand (source/right)
+
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-6].encoded_ins,
+                                    &instr_map[i-6].size);
+                
+                // Restore RBX from RBX mem
+                //part1
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RAX),
+                          xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-5].encoded_ins,
+                                    &instr_map[i-5].size);
+                //part2
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
+                          xed_reg(XED_REG_RBX),
+                          xed_reg(XED_REG_RAX));
+                set_encode_and_size(&enc_instr,
+                                    instr_map[i-4].encoded_ins,
+                                    &instr_map[i-4].size);
+                // RAX <- tc2_hot
+                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                    xed_reg(XED_REG_RAX),
+                    xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&(instr_map[targ_index].new_ins_addr), 64), 64));
+                set_encode_and_size(&enc_instr,
                                     instr_map[i-3].encoded_ins,
                                     &instr_map[i-3].size);
+                // JE RAX
 
-                // targ_reg <- [tc2_hot_addr]
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                    xed_reg(targ_reg),
-                    xed_mem_bd(XED_REG_INVALID,
-                               xed_disp((ADDRINT)&instr_map[targ_index].new_ins_addr, 64), 64));
-                set_encode_and_size(&enc_instr,
-                                    instr_map[i-1].encoded_ins,
-                                    &instr_map[i-1].size);
-
-                // JNE +skip (skip = size of previous mov)
-                xed_encoder_instruction_t enc_jcc;
-                xed_inst1(&enc_jcc, dstate, XED_ICLASS_JNZ, 64,
-                          xed_relbr((int8_t)instr_map[i-1].size, 8));
-                set_encode_and_size(&enc_jcc,  // <-- use enc_jcc here
-                                    instr_map[i-2].encoded_ins,
-                                    &instr_map[i-2].size);
-                // Label:
+                // Restore RAX <- [rax_mem]
             }
         }
     }
