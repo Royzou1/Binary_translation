@@ -1950,7 +1950,8 @@ void create_tc2_thread_func(void *v)
         }
 
         if (total_jumps_counter == 0) {
-          cerr << "zero jump were collected " << endl;
+          
+          cerr << "zero jump were collected; counter is: "<< curr_bbl.counter << endl;
           continue;
         }
         else
