@@ -1992,7 +1992,7 @@ void create_tc2_thread_func(void *v)
               // emit shortcut
               //cerr << "\033[1;32memit shortcut\033[37m\n";
               //cerr << "hot_tc2: " << instr_map[targ_index].new_ins_addr << 
-                      ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
+              //        ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
               static uint64_t rbx_mem = 0;
