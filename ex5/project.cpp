@@ -71,7 +71,6 @@ extern "C" {
 #include <time.h>
 
 using namespace std;
-std::ofstream outfile;
 /*======================================================================*/
 /* commandline switches                                                 */
 /*======================================================================*/
@@ -1902,20 +1901,6 @@ void create_tc2_thread_func(void *v)
     int rc = disable_profiling_in_tc(instr_map, num_of_instr_map_entries);
     if  (rc < 0)
       return;
-
-
-       //add counters
-
-    outfile.open("bb-profile-new.csv");
-    
-    size_t n = max_ins_count / 10;   // or std::size(arr) in C++17+
-
-    for (size_t i = 0; i < n; ++i) {
-        outfile << ", " << std::dec << i
-                        << ", " << std::dec << bbl_map[i].counter << endl;
-    }
-    outfile.close();
-
 
     // Step 2.1: Modify instr_map to be used for TC2.
     //
