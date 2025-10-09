@@ -1746,7 +1746,7 @@ void create_tc2_thread_func(void *v)
 
     for (size_t i = 0; i < n; ++i) {
         outfile << ", " << std::dec << i
-                        << ", " << std::dec << bbl_map[i].counter << endl;;
+                        << ", " << std::dec << bbl_map[i].counter << endl;
     }
     outfile.close();
 
