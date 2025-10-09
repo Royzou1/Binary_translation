@@ -1976,6 +1976,7 @@ void create_tc2_thread_func(void *v)
       if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
         cerr << "--------------------------------------------------" << endl;
         cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << endl;
+        cerr<< "the diap is : "  << disp << endl;
         
         bbl_map_t curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0; 
@@ -2000,6 +2001,7 @@ void create_tc2_thread_func(void *v)
 
           xed_reg_enum_t targ_reg;
           if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
+            
             cerr << "rax is the boss!!!!!!!!!!" << endl;
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
