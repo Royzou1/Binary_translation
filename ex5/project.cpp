@@ -1817,15 +1817,19 @@ int commit_translated_rtns_to_tc2()
   return 0;
 }
 
-bool is_jump_reg_not_rax_rip(INS ins) {
+bool is_jump_reg_not_rax_rip(INS ins, xed_reg_enum_t &targ_reg) {
+    xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
+
     const UINT32 memops = INS_MemoryOperandCount(ins);
     for (UINT32 i = 0; i < memops; i++) {
         REG base = INS_OperandMemoryBaseReg(ins, i);  // note the 'i' arg
         if (base != REG_INVALID() && REG_FullRegName(base) == REG_RAX) return true;
     }
     return false;
-
 }
+
+
 
 int set_encode_and_size(xed_encoder_instruction_t *enc_instr, 
                         char* encode_ins, 
@@ -1969,9 +1973,8 @@ void create_tc2_thread_func(void *v)
         if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) >= KnobProfileThreshold) {
           // jump [rax * 8 + immidiate]
 
-          //xed_reg_enum_t targ_reg;
-          if (is_jump_reg_not_rax_rip(instr_map[i].ins)) {
-            cerr<< "pllllleeeeeaaaaseeee work!!!!!!" << endl;
+          xed_reg_enum_t targ_reg;
+          if (is_jump_reg_not_rax_rip(instr_map[i].ins, targ_reg)) {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
             unsigned targ_index = 0;
