@@ -1994,7 +1994,7 @@ void create_tc2_thread_func(void *v)
                 static uint64_t rbx_mem = 0;
                 
                 // Save RAX -> [rax_mem]
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                     xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
                     xed_reg(XED_REG_RAX));
                 set_encode_and_size(&enc_instr,
@@ -2018,7 +2018,7 @@ void create_tc2_thread_func(void *v)
                                     &instr_map[i-10].size);
                 
                 // Restore RAX from [rax_mem]
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                     xed_reg(XED_REG_RAX),
                     xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
                 set_encode_and_size(&enc_instr,
@@ -2026,7 +2026,7 @@ void create_tc2_thread_func(void *v)
                                     &instr_map[i-9].size);
                 
                 // Mov RBX <- [RAX * 8 + disp]
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                           xed_reg(XED_REG_RBX),                               // dest: rbx
                           xed_mem_bisd(XED_REG_INVALID, XED_REG_RAX, 8,       // [rax*8 + disp]
                                       xed_disp(disp, 32), 64));               // disp32, mem width = 64 (qword)
@@ -2036,7 +2036,7 @@ void create_tc2_thread_func(void *v)
                                     &instr_map[i-8].size);
 
                 //MOV RAX <- hot_og_addr
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                         xed_reg(XED_REG_RAX), // Destination reg op.
                         xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
                 set_encode_and_size(&enc_instr,
@@ -2044,7 +2044,7 @@ void create_tc2_thread_func(void *v)
                                     &instr_map[i-7].size); 
                 
                 // CMP RAX RBX
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_CMP, 64,
                           xed_reg(XED_REG_RAX),   // First operand (destination/left)
                           xed_reg(XED_REG_RBX));  // Second operand (source/right)
 
@@ -2068,7 +2068,7 @@ void create_tc2_thread_func(void *v)
                                     instr_map[i-4].encoded_ins,
                                     &instr_map[i-4].size);
                 // RAX <- tc2_hot
-                xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                xed_inst2(&enc_instr, *dstate, XED_ICLASS_MOV, 64,
                     xed_reg(XED_REG_RAX),
                     xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&(instr_map[targ_index].new_ins_addr), 64), 64));
                 set_encode_and_size(&enc_instr,
