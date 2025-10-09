@@ -1988,7 +1988,7 @@ void create_tc2_thread_func(void *v)
                 std::cerr << "target inst not found\n";
             } else {
                 // emit shortcut
-                std::cerr << "emit shortcut\n";
+                std::cerr << "\033[1;32memit shortcut\033[37m\n";
                 xed_encoder_instruction_t enc_instr;
                 static uint64_t rax_mem = 0;
                 static uint64_t rbx_mem = 0;
