@@ -36,4 +36,4 @@ cp -f "${SO_SRC}" "${EX5_DIR}/"
 
 echo "==> run pin with ${BASE}.so in ${EX5_DIR}"
 cd "${EX5_DIR}"
-time "${PIN_BIN}" -t "${BASE}.so" -create_tc2 -prof_time 4 -- ./cc1 expr.i
+time "${PIN_BIN}" -t "${BASE}.so" -create_tc2 -prof_time 15 -- ./cc1 expr.i
