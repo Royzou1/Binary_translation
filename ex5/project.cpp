@@ -795,7 +795,7 @@ int add_profiling_instrs( INS ins,
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
   if (!is_indirect && was_profiled) {
-    //cerr << "skipped by using short" <<endl;
+    cerr << "skipped by using short" <<endl;
     return 0;
   }
 
