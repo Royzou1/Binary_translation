@@ -1069,7 +1069,7 @@ int add_profiling_instrs_short(INS ins,
                               unsigned bbl_num, 
                               REG killed_reg_pin)
 {
-    //cerr << "short route" <<endl;
+    cerr << "short route" <<endl;
     xed_encoder_instruction_t enc_instr;
 
     // 4-byte NOP placeholder for later patching
