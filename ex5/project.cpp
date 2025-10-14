@@ -1979,7 +1979,6 @@ void create_tc2_thread_func(void *v)
               cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
-              static uint64_t rbx_mem = 0;
               
               // Save RAX -> [rax_mem]
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
