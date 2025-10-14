@@ -800,17 +800,17 @@ int add_profiling_instrs( INS ins,
   static uint64_t correct = 0;
   static uint64_t tot = 0;
    xed_int32_t disp;
-  if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
-    cerr << "--------------------------------------------------\n";
-    cerr << "instruction: " << INS_Disassemble(ins) << "\n";
-    tot ++;
-    if (correct_form(ins,disp))
-      correct ++;
-    cerr << correct << " / " << tot << " Are correct form" << endl;
-  }
+  // if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
+  //   cerr << "--------------------------------------------------\n";
+  //   cerr << "instruction: " << INS_Disassemble(ins) << "\n";
+  //   tot ++;
+  //   if (correct_form(ins,disp))
+  //     correct ++;
+  //   cerr << correct << " / " << tot << " Are correct form" << endl;
+  // }
   if (!is_indirect && was_profiled) {
-    if (KnobDebugPrint)
-      cerr << "skipped by using short" <<endl;
+    // if (KnobDebugPrint)
+    //   cerr << "skipped by using short" <<endl;
     return 0;
   }
 
@@ -1084,9 +1084,9 @@ int add_profiling_instrs_short(INS ins,
                               unsigned bbl_num, 
                               REG killed_reg_pin)
 {
-    if (KnobDebugPrint)
+    /*if (KnobDebugPrint)
       cerr << "short route" <<endl;
-    xed_encoder_instruction_t enc_instr;
+    */xed_encoder_instruction_t enc_instr;
 
     // 4-byte NOP placeholder for later patching
     xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
@@ -1953,12 +1953,12 @@ void create_tc2_thread_func(void *v)
     /***************** de-virtualization *************************************/
     xed_int32_t disp = 0;
     if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
-        if (KnobDebugPrint){
+        /*if (KnobDebugPrint){
           cerr << "--------------------------------------------------\n";
           cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
           cerr << "the disp is : " << disp << "\n";
         }
-        bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
+        */bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0;
         int total_jumps_counter = 0;
 
@@ -1966,39 +1966,39 @@ void create_tc2_thread_func(void *v)
             if (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) index = j;
             total_jumps_counter += curr_bbl.targ_count[j];
         }
-        if (KnobDebugPrint) {
+        /*if (KnobDebugPrint) {
           cerr << "bbl num: " << instr_map[i].bbl_num
               << ", count: " << curr_bbl.targ_count[index]
               << ", total count: " << total_jumps_counter << "\n";
         }
-        if (total_jumps_counter == 0) {
-          if (KnobDebugPrint)
+        */if (total_jumps_counter == 0) {
+          /*if (KnobDebugPrint)
             cerr << "\033[33mzero jumps were collected; counter is: " << curr_bbl.counter << "\033[37m\n";
-        }
+        */}
         else if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {
-          if (KnobDebugPrint)
+          /*if (KnobDebugPrint)
             cerr << "\033[31mNot dominant address\033[37m\n";
-        }
+        */}
         else {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
-            if (KnobDebugPrint)
-              cerr << "hot_og: " << hot_og << endl;
+            //if (KnobDebugPrint)
+              //cerr << "hot_og: " << hot_og << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
                     break;
             }
             if (targ_index == num_of_instr_map_entries) {
-                cerr << "target inst not found\n";
+                //cerr << "target inst not found\n";
             } 
             else 
             {
               // emit shortcut
-              if (KnobDebugPrint) {
-                cerr << "\033[1;32memit shortcut\033[37m\n";
-                cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
-              }
+              //if (KnobDebugPrint) {
+              //  cerr << "\033[1;32memit shortcut\033[37m\n";
+              //  cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
+              //}
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
               
