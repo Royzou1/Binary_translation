@@ -783,7 +783,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr, INS i
     return 0;
 }
 
-
+bool correct_form(INS ins, xed_int32_t & disp);
 /**************************/
 /* add_profiling_instrs() */
 /**************************/
@@ -806,7 +806,7 @@ int add_profiling_instrs( INS ins,
     tot ++;
     if (correct_form(ins,disp))
       correct ++;
-    cerr << correct << " / " << total << " Are correct form" << endl;
+    cerr << correct << " / " << tot << " Are correct form" << endl;
   }
   if (!is_indirect && was_profiled) {
     if (KnobDebugPrint)
