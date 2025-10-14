@@ -797,9 +797,9 @@ int add_profiling_instrs( INS ins,
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
-  static uint64_t correct = 0;
-  static uint64_t tot = 0;
-   xed_int32_t disp;
+  //static uint64_t correct = 0;
+  //static uint64_t tot = 0;
+  // xed_int32_t disp;
   // if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
   //   cerr << "--------------------------------------------------\n";
   //   cerr << "instruction: " << INS_Disassemble(ins) << "\n";
