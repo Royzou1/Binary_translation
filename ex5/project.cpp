@@ -799,7 +799,7 @@ int add_profiling_instrs( INS ins,
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
   if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
     cerr << "--------------------------------------------------\n";
-    cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+    cerr << "instruction: " << INS_Disassemble(ins) << "\n";
   }
   if (!is_indirect && was_profiled) {
     if (KnobDebugPrint)
