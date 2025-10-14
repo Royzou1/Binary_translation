@@ -797,6 +797,10 @@ int add_profiling_instrs( INS ins,
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
+  if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
+    cerr << "--------------------------------------------------\n";
+    cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+  }
   if (!is_indirect && was_profiled) {
     if (KnobDebugPrint)
       cerr << "skipped by using short" <<endl;
