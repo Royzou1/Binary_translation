@@ -109,6 +109,9 @@ KNOB<BOOL>   KnobNoReorderCode(KNOB_MODE_WRITEONCE,    "pintool",
 KNOB<UINT> KnobProfileThreshold(KNOB_MODE_WRITEONCE,    "pintool",
                                   "prof_threshold", "95", "Profile percentage threshold");
 
+KNOB<BOOL> KnobDebugPrint(KNOB_MODE_WRITEONCE,    "pintool",
+  "Debug", "0", "printing debug stuff");
+
 
 /* ===================================================================== */
 /* Global Variables */
@@ -795,7 +798,8 @@ int add_profiling_instrs( INS ins,
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
   if (!is_indirect && was_profiled) {
-    cerr << "skipped by using short" <<endl;
+    if (KnobDebugPrint)
+      cerr << "skipped by using short" <<endl;
     return 0;
   }
 
@@ -1069,7 +1073,8 @@ int add_profiling_instrs_short(INS ins,
                               unsigned bbl_num, 
                               REG killed_reg_pin)
 {
-    cerr << "short route" <<endl;
+    if (KnobDebugPrint)
+      cerr << "short route" <<endl;
     xed_encoder_instruction_t enc_instr;
 
     // 4-byte NOP placeholder for later patching
@@ -1937,10 +1942,11 @@ void create_tc2_thread_func(void *v)
     /***************** de-virtualization *************************************/
     xed_int32_t disp = 0;
     if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
-        cerr << "--------------------------------------------------\n";
-        cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
-        cerr << "the disp is : " << disp << "\n";
-
+        if (KnobDebugPrint){
+          cerr << "--------------------------------------------------\n";
+          cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+          cerr << "the disp is : " << disp << "\n";
+        }
         bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0;
         int total_jumps_counter = 0;
@@ -1949,21 +1955,24 @@ void create_tc2_thread_func(void *v)
             if (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) index = j;
             total_jumps_counter += curr_bbl.targ_count[j];
         }
-
-        cerr << "bbl num: " << instr_map[i].bbl_num
-                  << ", count: " << curr_bbl.targ_count[index]
-                  << ", total count: " << total_jumps_counter << "\n";
-
+        if (KnobDebugPrint) {
+          cerr << "bbl num: " << instr_map[i].bbl_num
+              << ", count: " << curr_bbl.targ_count[index]
+              << ", total count: " << total_jumps_counter << "\n";
+        }
         if (total_jumps_counter == 0) {
+          if (KnobDebugPrint)
             cerr << "\033[33mzero jumps were collected; counter is: " << curr_bbl.counter << "\033[37m\n";
         }
         else if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {
+          if (KnobDebugPrint)
             cerr << "\033[31mNot dominant address\033[37m\n";
         }
         else {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
-            cerr << "hot_og: " << hot_og << endl;
+            if (KnobDebugPrint)
+              cerr << "hot_og: " << hot_og << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
@@ -1975,8 +1984,10 @@ void create_tc2_thread_func(void *v)
             else 
             {
               // emit shortcut
-              cerr << "\033[1;32memit shortcut\033[37m\n";
-              cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
+              if (KnobDebugPrint) {
+                cerr << "\033[1;32memit shortcut\033[37m\n";
+                cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
+              }
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
               
