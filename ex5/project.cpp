@@ -71,6 +71,7 @@ extern "C" {
 #include <time.h>
 
 using namespace std;
+
 /*======================================================================*/
 /* commandline switches                                                 */
 /*======================================================================*/
@@ -108,9 +109,6 @@ KNOB<BOOL>   KnobNoReorderCode(KNOB_MODE_WRITEONCE,    "pintool",
 
 KNOB<UINT> KnobProfileThreshold(KNOB_MODE_WRITEONCE,    "pintool",
                                   "prof_threshold", "95", "Profile percentage threshold");
-
-KNOB<BOOL> KnobDebugPrint(KNOB_MODE_WRITEONCE,    "pintool",
-  "Debug", "0", "printing debug stuff");
 
 
 /* ===================================================================== */
@@ -783,7 +781,7 @@ int add_prof_instr(ADDRINT ins_addr, xed_encoder_instruction_t *enc_instr, INS i
     return 0;
 }
 
-bool correct_form(INS ins, xed_int32_t & disp);
+
 /**************************/
 /* add_profiling_instrs() */
 /**************************/
@@ -797,20 +795,8 @@ int add_profiling_instrs( INS ins,
   xed_encoder_instruction_t enc_instr;
   static uint64_t rax_mem = 0;
   bool is_indirect = INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && !INS_IsCall(ins);
-  //static uint64_t correct = 0;
-  //static uint64_t tot = 0;
-  // xed_int32_t disp;
-  // if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
-  //   cerr << "--------------------------------------------------\n";
-  //   cerr << "instruction: " << INS_Disassemble(ins) << "\n";
-  //   tot ++;
-  //   if (correct_form(ins,disp))
-  //     correct ++;
-  //   cerr << correct << " / " << tot << " Are correct form" << endl;
-  // }
   if (!is_indirect && was_profiled) {
-    // if (KnobDebugPrint)
-    //   cerr << "skipped by using short" <<endl;
+    //cerr << "skipped by using short" <<endl;
     return 0;
   }
 
@@ -1084,9 +1070,8 @@ int add_profiling_instrs_short(INS ins,
                               unsigned bbl_num, 
                               REG killed_reg_pin)
 {
-    /*if (KnobDebugPrint)
-      cerr << "short route" <<endl;
-    */xed_encoder_instruction_t enc_instr;
+    //cerr << "short route" <<endl;
+    xed_encoder_instruction_t enc_instr;
 
     // 4-byte NOP placeholder for later patching
     xed_inst0(&enc_instr, dstate, XED_ICLASS_NOP4, 64);
@@ -1918,8 +1903,8 @@ void create_tc2_thread_func(void *v)
     if  (rc < 0)
       return;
 
+
     // Step 2.1: Modify instr_map to be used for TC2.
-    //
 
     // saving the orignal ins address
     for (unsigned i = 0; i < num_of_instr_map_entries; i++) {
@@ -1953,12 +1938,11 @@ void create_tc2_thread_func(void *v)
     /***************** de-virtualization *************************************/
     xed_int32_t disp = 0;
     if (instr_map[i].indirect_profiled && correct_form(instr_map[i].ins, disp)) {
-        /*if (KnobDebugPrint){
-          cerr << "--------------------------------------------------\n";
-          cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
-          cerr << "the disp is : " << disp << "\n";
-        }
-        */bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
+        //cerr << "--------------------------------------------------\n";
+        //cerr << "instruction: " << INS_Disassemble(instr_map[i].ins) << "\n";
+        //cerr << "the disp is : " << disp << "\n";
+
+        bbl_map_t& curr_bbl = bbl_map[instr_map[i].bbl_num];
         int index = 0;
         int total_jumps_counter = 0;
 
@@ -1966,24 +1950,21 @@ void create_tc2_thread_func(void *v)
             if (curr_bbl.targ_count[j] > curr_bbl.targ_count[index]) index = j;
             total_jumps_counter += curr_bbl.targ_count[j];
         }
-        /*if (KnobDebugPrint) {
-          cerr << "bbl num: " << instr_map[i].bbl_num
-              << ", count: " << curr_bbl.targ_count[index]
-              << ", total count: " << total_jumps_counter << "\n";
+
+        //cerr << "bbl num: " << instr_map[i].bbl_num
+        //          << ", counter: " << curr_bbl.counter
+        //          << ", total count: " << total_jumps_counter << "\n";
+
+        if (total_jumps_counter == 0) {
+            //cerr << "zero jumps were collected; counter is: " << curr_bbl.counter << "\n";
         }
-        */if (total_jumps_counter == 0) {
-          /*if (KnobDebugPrint)
-            cerr << "\033[33mzero jumps were collected; counter is: " << curr_bbl.counter << "\033[37m\n";
-        */}
         else if (((curr_bbl.targ_count[index] * 100) / total_jumps_counter) < KnobProfileThreshold) {
-          /*if (KnobDebugPrint)
-            cerr << "\033[31mNot dominant address\033[37m\n";
-        */}
+            //cerr << "Not dominant address\n";
+        }
         else {
             // check if shortcut is available
             ADDRINT hot_og = curr_bbl.targ_addr[index];
-            //if (KnobDebugPrint)
-              //cerr << "hot_og: " << hot_og << endl;
+            //cerr << "hot_og: " << hot_og << ", size is: " << sizeof(hot_og) << endl;
             unsigned targ_index = 0;
             for (targ_index = 0; targ_index < num_of_instr_map_entries; targ_index++) { // fix loop var/cond
                 if (instr_map[targ_index].og_not_changed == hot_og)
@@ -1995,41 +1976,87 @@ void create_tc2_thread_func(void *v)
             else 
             {
               // emit shortcut
-              //if (KnobDebugPrint) {
-              //  cerr << "\033[1;32memit shortcut\033[37m\n";
-              //  cerr << "hot_tc1: " << instr_map[targ_index].new_ins_addr << endl;
-              //}
+              //cerr << "\033[1;32memit shortcut\033[37m\n";
+              //cerr << "hot_tc2: " << instr_map[targ_index].new_ins_addr << 
+              //        ", size is: " << sizeof(instr_map[targ_index].new_ins_addr) << endl;
               xed_encoder_instruction_t enc_instr;
               static uint64_t rax_mem = 0;
+              static uint64_t rbx_mem = 0;
               
               // Save RAX -> [rax_mem]
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                   xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64),
                   xed_reg(XED_REG_RAX));
               set_encode_and_size(&enc_instr,
-                                  instr_map[i-7].encoded_ins,
-                                  &instr_map[i-7].size);
+                                  instr_map[i-13].encoded_ins,
+                                  &instr_map[i-13].size);
               
-              // Mov RAX <- [RAX * 8 + disp]
+              // Save RBX -> [rbx_mem]
+              //part 1
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
-                        xed_reg(XED_REG_RAX),                               // dest: rbx
+                        xed_reg(XED_REG_RAX),
+                        xed_reg(XED_REG_RBX));
+              set_encode_and_size(&enc_instr,
+                                  instr_map[i-12].encoded_ins,
+                                  &instr_map[i-12].size);
+              //part 2
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64),
+                        xed_reg(XED_REG_RAX));
+              set_encode_and_size(&enc_instr,
+                                  instr_map[i-11].encoded_ins,
+                                  &instr_map[i-11].size);
+              
+              // Restore RAX from [rax_mem]
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                  xed_reg(XED_REG_RAX),
+                  xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rax_mem, 64), 64));
+              set_encode_and_size(&enc_instr,
+                                  instr_map[i-10].encoded_ins,
+                                  &instr_map[i-10].size);
+              
+              // Mov RBX <- [RAX * 8 + disp]
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                        xed_reg(XED_REG_RBX),                               // dest: rbx
                         xed_mem_bisd(XED_REG_INVALID, XED_REG_RAX, 8,       // [rax*8 + disp]
                                     xed_disp(disp, 32), 64));               // disp32, mem width = 64 (qword)
 
               set_encode_and_size(&enc_instr,
+                                  instr_map[i-9].encoded_ins,
+                                  &instr_map[i-9].size);
+
+              //MOV RAX <- hot_og_addr
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                      xed_reg(XED_REG_RAX), // Destination reg op.
+                      xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&curr_bbl.targ_addr[index], 64), 64));
+              set_encode_and_size(&enc_instr,
+                                  instr_map[i-8].encoded_ins,
+                                  &instr_map[i-8].size); 
+              
+              // CMP RAX RBX
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
+                        xed_reg(XED_REG_RAX),   // First operand (destination/left)
+                        xed_reg(XED_REG_RBX));  // Second operand (source/right)
+
+              set_encode_and_size(&enc_instr,
+                                  instr_map[i-7].encoded_ins,
+                                  &instr_map[i-7].size);
+              
+              // Restore RBX from RBX mem
+              //part1
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                        xed_reg(XED_REG_RAX),
+                        xed_mem_bd(XED_REG_INVALID, xed_disp((ADDRINT)&rbx_mem, 64), 64));
+              set_encode_and_size(&enc_instr,
                                   instr_map[i-6].encoded_ins,
                                   &instr_map[i-6].size);
-              
-              // CMP rax, imm32  (imm32 sign-extends to 64)
-              xed_inst2(&enc_instr, dstate, XED_ICLASS_CMP, 64,
-                        xed_reg(XED_REG_RAX),
-                        xed_imm0(static_cast<xed_uint32_t>(curr_bbl.targ_addr[index]), 32));
-
-
+              //part2
+              xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
+                        xed_reg(XED_REG_RBX),
+                        xed_reg(XED_REG_RAX));
               set_encode_and_size(&enc_instr,
                                   instr_map[i-5].encoded_ins,
                                   &instr_map[i-5].size);
-              
               // RAX <- tc2_hot
               xed_inst2(&enc_instr, dstate, XED_ICLASS_MOV, 64,
                   xed_reg(XED_REG_RAX),
@@ -2044,7 +2071,7 @@ void create_tc2_thread_func(void *v)
                                   instr_map[i-2].encoded_ins, 
                                   &instr_map[i-2].size);
               
-                                  // JNE skip | -3
+              // JNE skip | -3
               xed_inst1(&enc_instr, dstate, XED_ICLASS_JNZ /* JNE */, 64,
                         xed_relbr((int8_t)instr_map[i-2].size, 8));   // rel8 = bytes to skip
             
