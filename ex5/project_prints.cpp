@@ -1730,7 +1730,7 @@ int create_tc(IMG img)
                     {
                         correct ++;
                     }
-                    else if (IsCallReg)
+                    else if (IsCallReg(ins))
                     {
                         call_reg++;
                     }
