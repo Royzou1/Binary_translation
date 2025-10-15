@@ -1532,36 +1532,36 @@ bool IsJumpReg(INS ins) {
 }
 
 bool IsCallReg(INS ins) {
-    // Must be CALL and indirect (not call rel32)
-    if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins))
+    // must be a CALL instruction
+    if (!INS_IsCall(ins))
         return false;
 
-    // Exclude far calls (segment-based)
-    if (INS_IsFarCall(ins))
+    // indirect control flow → target not immediate
+    if (!INS_IsIndirectControlFlow(ins))
         return false;
 
-    // Operand 0 must exist and be a register (not mem / imm)
-    if (INS_OperandCount(ins) == 0 || !INS_OperandIsReg(ins, 0))
-        return false;
-
-    REG r = INS_OperandReg(ins, 0);
-
-    // Must be a general-purpose register (no RIP, segment, etc.)
-    if (r == REG_INVALID() || r == REG_RIP)
-        return false;
-
-#if defined(TARGET_IA32E)
-    if (!REG_is_gr64(r))
-        return false;
-#else
-    if (!REG_is_gr32(r))
-        return false;
-#endif
-
-    // Optional: ensure no displacement or memory base/index
+    // exclude memory-based calls like [rax+offset]
     if (INS_OperandIsMemory(ins, 0))
         return false;
 
+    // require register target (e.g. call rax)
+    if (!INS_OperandIsReg(ins, 0))
+        return false;
+
+    REG target = INS_OperandReg(ins, 0);
+    if (target == REG_INVALID() || target == REG_RIP)
+        return false;
+
+#if defined(TARGET_IA32E)
+    // only allow general-purpose 64-bit regs
+    if (!REG_is_gr64(target))
+        return false;
+#else
+    if (!REG_is_gr32(target))
+        return false;
+#endif
+
+    // all checks passed → pure "call reg" (no offsets)
     return true;
 }
 
