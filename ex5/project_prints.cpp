@@ -1532,24 +1532,35 @@ bool IsJumpReg(INS ins) {
 }
 
 bool IsCallReg(INS ins) {
-    // must be a CALL and indirect (i.e., not call rel32/rel64)
-    if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins)) return false;
+    // Must be CALL and indirect (not call rel32)
+    if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins))
+        return false;
 
-    // exclude far calls (segmented)
-    if (INS_IsFarCall(ins)) return false;
+    // Exclude far calls (segment-based)
+    if (INS_IsFarCall(ins))
+        return false;
 
-    // operand 0 of a CALL is the target; require a register (not mem)
-    if (!INS_OperandIsReg(ins, 0)) return false;
+    // Operand 0 must exist and be a register (not mem / imm)
+    if (INS_OperandCount(ins) == 0 || !INS_OperandIsReg(ins, 0))
+        return false;
 
     REG r = INS_OperandReg(ins, 0);
-    if (r == REG_INVALID() || r == REG_RIP) return false;
+
+    // Must be a general-purpose register (no RIP, segment, etc.)
+    if (r == REG_INVALID() || r == REG_RIP)
+        return false;
 
 #if defined(TARGET_IA32E)
-    // In 64-bit mode the target must be a 64-bit GPR
-    if (!REG_is_gr64(r)) return false;
+    if (!REG_is_gr64(r))
+        return false;
 #else
-    if (!REG_is_gr32(r)) return false;
+    if (!REG_is_gr32(r))
+        return false;
 #endif
+
+    // Optional: ensure no displacement or memory base/index
+    if (INS_OperandIsMemory(ins, 0))
+        return false;
 
     return true;
 }
