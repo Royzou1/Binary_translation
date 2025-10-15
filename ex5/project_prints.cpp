@@ -1531,14 +1531,11 @@ bool IsJumpReg(INS ins) {
     return true;
 }
 
-static inline bool IsCallReg(INS ins) {
+bool IsCallReg(INS ins) {
     const xed_decoded_inst_t* xedd = INS_XedDec(ins);
     if (!xedd) return false;
 
-    // Must be exactly the near CALL encoding (not far)
-    if (xed_decoded_inst_get_iclass(xedd) != XED_ICLASS_CALL_NEAR)
-        return false;
-
+    
     // Reject memory-indirect forms like: call qword ptr [rbx+0x20]
     if (xed_decoded_inst_number_of_memory_operands(xedd) != 0)
         return false;
