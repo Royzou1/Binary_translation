@@ -1532,28 +1532,24 @@ bool IsJumpReg(INS ins) {
 }
 
 bool IsCallReg(INS ins) {
-    // Must be an indirect control transfer instruction (target computed)
-    if (!INS_IsIndirectControlFlow(ins))
-        return false;
+    // must be a CALL and indirect (i.e., not call rel32/rel64)
+    if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins)) return false;
 
-    // Only CALLs (exclude JMPs and RETs)
-    if (!INS_IsCall(ins) || INS_IsRet(ins))
-        return false;
+    // exclude far calls (segmented)
+    if (INS_IsFarCall(ins)) return false;
 
-    xed_decoded_inst_t *xedd = INS_XedDec(ins);
+    // operand 0 of a CALL is the target; require a register (not mem)
+    if (!INS_OperandIsReg(ins, 0)) return false;
 
-    // Make sure it’s a CALL_NEAR instruction
-    if (xed_decoded_inst_get_iclass(xedd) != XED_ICLASS_CALL_NEAR)
-        return false;
+    REG r = INS_OperandReg(ins, 0);
+    if (r == REG_INVALID() || r == REG_RIP) return false;
 
-    // Must not be memory-indirect (no [mem])
-    if (xed_decoded_inst_number_of_memory_operands(xedd) > 0)
-        return false;
-
-    // Get the target register (e.g., RCX in "call rcx")
-    xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-    if (targ_reg == XED_REG_INVALID || targ_reg == XED_REG_RIP)
-        return false;
+#if defined(TARGET_IA32E)
+    // In 64-bit mode the target must be a 64-bit GPR
+    if (!REG_is_gr64(r)) return false;
+#else
+    if (!REG_is_gr32(r)) return false;
+#endif
 
     return true;
 }
