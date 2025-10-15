@@ -1510,29 +1510,22 @@ int fix_instructions_displacements()
    return 0;
 }
 
-
 bool IsJumpReg(INS ins) {
-    // Must be an unconditional indirect jump (not call, not ret)
-    if (!INS_IsIndirectControlFlow(ins) || INS_IsCall(ins) || INS_IsRet(ins))
+    if (!INS_IsIndirectControlFlow(ins))
+        return false;
+
+    if (INS_IsCall(ins) || INS_IsRet(ins))
         return false;
 
     xed_decoded_inst_t *xedd = INS_XedDec(ins);
-    xed_iclass_enum_t iclass = xed_decoded_inst_get_iclass(xedd);
-
-    // We only care about JMP (not LOOP, not conditional)
-    if (iclass != XED_ICLASS_JMP)
+    if (xed_decoded_inst_get_iclass(xedd) != XED_ICLASS_JMP)
         return false;
 
-    // Should have no memory operands — only a register target
-    unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
-    if (memops > 0)
+    if (xed_decoded_inst_number_of_memory_operands(xedd) > 0)
         return false;
 
-    // Get the target register
     xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
-    if (targ_reg == XED_REG_INVALID ||
-        targ_reg == XED_REG_RIP ||
-        targ_reg == XED_REG_RAX)  // optional exclusion
+    if (targ_reg == XED_REG_INVALID || targ_reg == XED_REG_RIP)
         return false;
 
     return true;
@@ -1543,22 +1536,21 @@ bool IsCallReg(INS ins) {
     if (!INS_IsIndirectControlFlow(ins))
         return false;
 
-    // Exclude jumps, returns
-    if (INS_IsRet(ins) || INS_IsBranchOrCall(ins) == false)
+    // Only CALLs (exclude JMPs and RETs)
+    if (!INS_IsCall(ins) || INS_IsRet(ins))
         return false;
 
     xed_decoded_inst_t *xedd = INS_XedDec(ins);
 
-    // Only CALL instruction (not JMP, not RET)
+    // Make sure it’s a CALL_NEAR instruction
     if (xed_decoded_inst_get_iclass(xedd) != XED_ICLASS_CALL_NEAR)
         return false;
 
-    // Must not be memory-indirect
-    unsigned memops = xed_decoded_inst_number_of_memory_operands(xedd);
-    if (memops > 0)
+    // Must not be memory-indirect (no [mem])
+    if (xed_decoded_inst_number_of_memory_operands(xedd) > 0)
         return false;
 
-    // Get the target register
+    // Get the target register (e.g., RCX in "call rcx")
     xed_reg_enum_t targ_reg = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
     if (targ_reg == XED_REG_INVALID || targ_reg == XED_REG_RIP)
         return false;
@@ -1744,7 +1736,7 @@ int create_tc(IMG img)
                     }
                     else if (IsJumpReg(ins))
                     {
-                        jump_reg++:
+                        jump_reg++;
                     }
                     else {
                         others++;
