@@ -1534,7 +1534,6 @@ bool IsJumpReg(INS ins) {
 bool IsCallReg(INS ins) {
     // must be an indirect CALL (not rel32/rel64)
     if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins)) return false;
-    if (INS_IsFarCall(ins)) return false;
 
     // reject any memory-indirect forms: call [..], call [rip+..], etc.
     if (INS_MemoryOperandCount(ins) != 0) return false;
