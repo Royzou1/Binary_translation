@@ -1531,28 +1531,39 @@ bool IsJumpReg(INS ins) {
     return true;
 }
 
-bool IsCallReg(INS ins) {
-    // must be an indirect CALL (not rel32/rel64)
-    if (!INS_IsCall(ins) || !INS_IsIndirectControlFlow(ins)) return false;
+static inline bool IsCallReg(INS ins) {
+    const xed_decoded_inst_t* xedd = INS_XedDec(ins);
+    if (!xedd) return false;
 
-    // reject any memory-indirect forms: call [..], call [rip+..], etc.
-    if (INS_MemoryOperandCount(ins) != 0) return false;
+    // Must be exactly the near CALL encoding (not far)
+    if (xed_decoded_inst_get_iclass(xedd) != XED_ICLASS_CALL_NEAR)
+        return false;
 
-    // target must be a register (pure "call r64")
-    REG target = REG_INVALID();
-    for (UINT32 i = 0; i < INS_OperandCount(ins); i++) {
-        if (INS_OperandIsReg(ins, i)) { target = INS_OperandReg(ins, i); break; }
-    }
-    if (target == REG_INVALID() || target == REG_RIP) return false;
+    // Reject memory-indirect forms like: call qword ptr [rbx+0x20]
+    if (xed_decoded_inst_number_of_memory_operands(xedd) != 0)
+        return false;
 
-#if defined(TARGET_IA32E)
-    if (!REG_is_gr64(target)) return false;
-#else
-    if (!REG_is_gr32(target)) return false;
-#endif
-    return true;
+    // For direct calls (call rel32), there is NO register operand.
+    // For register-indirect (call r/m64 with reg form), REG0 holds the target register.
+    xed_reg_enum_t r0 = xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG0);
+    if (r0 == XED_REG_INVALID)
+        return false;
+
+    // Be strict: there should be exactly one explicit register operand.
+    if (xed_decoded_inst_get_reg(xedd, XED_OPERAND_REG1) != XED_REG_INVALID)
+        return false;
+
+    // Ensure it's a general-purpose register (64-bit on IA-32e)
+    xed_reg_class_enum_t cls = xed_reg_class(r0);
+    if (cls != XED_REG_CLASS_GPR64 && cls != XED_REG_CLASS_GPR32)
+        return false;
+
+    // (Defensive) exclude RIP/EIP even though they won't appear here
+    if (r0 == XED_REG_RIP || r0 == XED_REG_EIP)
+        return false;
+
+    return true; // This is exactly: call <reg>
 }
-
 bool correct_form(INS ins, xed_int32_t & disp);
 
 
